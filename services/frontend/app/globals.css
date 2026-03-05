@@ -1,0 +1,127 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Fraunces:opsz,wght@9..144,500&display=swap');
+
+:root {
+  --bg-a: #f7f9ff;
+  --bg-b: #d9f3ea;
+  --ink: #12333a;
+  --ink-soft: #2f5b62;
+  --card: rgba(255, 255, 255, 0.85);
+  --line: rgba(18, 51, 58, 0.18);
+  --accent: #ff7b54;
+  --accent-2: #0ea5a7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
+  color: var(--ink);
+  background: radial-gradient(circle at 10% 10%, #ffffff 0%, var(--bg-a) 38%, var(--bg-b) 100%);
+  min-height: 100vh;
+}
+
+.bg-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(125deg, rgba(255, 123, 84, 0.09), rgba(14, 165, 167, 0.08));
+  z-index: -1;
+}
+
+.container {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  backdrop-filter: blur(6px);
+}
+
+h1, h2, h3 {
+  font-family: 'Fraunces', serif;
+  margin: 0 0 10px;
+}
+
+h1 {
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+}
+
+input, textarea, select, button {
+  font-family: inherit;
+  width: 100%;
+  margin-top: 8px;
+  margin-bottom: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+textarea {
+  min-height: 130px;
+}
+
+button {
+  background: linear-gradient(135deg, var(--accent), #f97316);
+  color: #fff;
+  border: 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button.secondary {
+  background: linear-gradient(135deg, var(--accent-2), #10b981);
+}
+
+.nav {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.nav a {
+  text-align: center;
+  text-decoration: none;
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.grid-2 {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.kpi {
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+pre {
+  overflow: auto;
+  background: #f2f7f7;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+@media (max-width: 880px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
