@@ -1,19 +1,21 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from app.models.models import UserRole
 
 
-class LoginRequest(BaseModel):
+class PasswordValidatedModel(BaseModel):
+    password: str = Field(min_length=8, max_length=128)
+
+
+class LoginRequest(PasswordValidatedModel):
     email: EmailStr
-    password: str
 
 
-class BootstrapRequest(BaseModel):
+class BootstrapRequest(PasswordValidatedModel):
     tenant_name: str
     tenant_slug: str
     email: EmailStr
     full_name: str
-    password: str
 
 
 class TokenResponse(BaseModel):
