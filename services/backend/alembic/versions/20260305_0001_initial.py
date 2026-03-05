@@ -17,10 +17,18 @@ depends_on = None
 
 
 def upgrade() -> None:
-    user_role = sa.Enum('owner', 'admin', 'agent', 'analyst', name='userrole')
-    call_direction = sa.Enum('inbound', 'outbound', name='calldirection')
+    user_role = sa.Enum('owner', 'admin', 'agent', 'analyst', name='userrole', create_type=False)
+    call_direction = sa.Enum('inbound', 'outbound', name='calldirection', create_type=False)
     call_status = sa.Enum(
-        'queued', 'ringing', 'in_progress', 'completed', 'failed', 'no_answer', 'escalated', name='callstatus'
+        'queued',
+        'ringing',
+        'in_progress',
+        'completed',
+        'failed',
+        'no_answer',
+        'escalated',
+        name='callstatus',
+        create_type=False,
     )
 
     user_role.create(op.get_bind(), checkfirst=True)
