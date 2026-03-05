@@ -8,34 +8,34 @@ class Settings(BaseSettings):
     app_name: str = 'Aether VoiceOps API'
     environment: str = 'development'
     api_v1_prefix: str = '/api/v1'
-    secret_key: str = 'change-me'
+    secret_key: str = '423eaaec2bdb3aa07e6c4eba999232a7c098f90261f4f3ce44faf5aab51d0f9e'
     jwt_algorithm: str = 'HS256'
     access_token_expire_minutes: int = 720
 
-    platform_admin_key: str = 'change-platform-key'
+    platform_admin_key: str = 'temp_admin_voiceops_key_2026'
     tenant_secret_key: str = 'bWMzM3J5b25nYmFzZTY0c2VjcmV0a2V5MTIzNDU2Nzg5MA=='
 
     postgres_user: str = 'voiceops'
-    postgres_password: str = 'voiceops'
+    postgres_password: str = 'voiceops_gmccmg_infra_2026'
     postgres_db: str = 'voiceops'
-    postgres_host: str = 'localhost'
+    postgres_host: str = 'acp-postgres'
     postgres_port: int = 5432
 
-    redis_url: str = 'redis://localhost:6379/0'
+    redis_url: str = 'redis://:voiceops_gmccmg_infra_2026@acp-valkey:6379/0'
 
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
     twilio_from_number: str | None = None
-    public_base_url: str = 'http://localhost:8000'
+    public_base_url: str = 'https://voice.aetherpro.us'
 
     asr_endpoint: str = 'http://asr:9000/transcribe'
     asr_streaming_endpoint: str | None = None
     tts_endpoint: str = 'https://tts.aetherpro.us/v1/tts'
 
-    llm_provider: str = 'local'
+    llm_provider: str = 'openai'
     llm_endpoint: str | None = None
     llm_api_key: str | None = None
-    llm_model: str = 'gpt-4o-mini'
+    llm_model: str = 'qwen3.5-35b'
 
     enable_tracing: bool = False
 
