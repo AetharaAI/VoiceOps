@@ -29,6 +29,7 @@ services:
       - '3000:3000'
     volumes:
       - ./services/frontend:/app
+      - /app/node_modules
     networks:
       - aether_net
 

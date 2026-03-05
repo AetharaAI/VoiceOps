@@ -53,6 +53,7 @@ services:
       - '3000:3000'
     volumes:
       - ./services/frontend:/app
+      - /app/node_modules
 
   prometheus:
     image: prom/prometheus:v2.55.1
