@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     tenant_secret_key: str = 'bWMzM3J5b25nYmFzZTY0c2VjcmV0a2V5MTIzNDU2Nzg5MA=='
 
     postgres_user: str = 'voiceops'
-    postgres_password: str = 'voiceops_gmccmg_infra_2026'
+    postgres_password: str = 'voiceops_gmccmg_2026_infra'
     postgres_db: str = 'voiceops'
     postgres_host: str = 'acp-postgres'
     postgres_port: int = 5432
