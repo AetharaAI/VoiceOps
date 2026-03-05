@@ -47,4 +47,5 @@ docker compose up --build
 ## Notes
 - Telephony provider interface is swappable (`services/backend/app/services/telephony/providers.py`).
 - ASR/TTS endpoints are externalized via environment variables.
+- OpenAI-compatible LLM gateways are supported via `LLM_PROVIDER=openai` and `LLM_MODEL=<name>`.
 - Current runtime targets Docker Compose; service boundaries are prepared for K8s migration.

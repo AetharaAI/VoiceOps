@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     llm_provider: str = 'local'
     llm_endpoint: str | None = None
     llm_api_key: str | None = None
+    llm_model: str = 'gpt-4o-mini'
 
     enable_tracing: bool = False
 

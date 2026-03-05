@@ -56,6 +56,12 @@
   - verify `ASR_ENDPOINT` receives audio payload and returns `{ text: ... }`
 - No TTS audio:
   - verify `TTS_ENDPOINT` supports POST JSON `{text,voice,format}`
+- LLM provider issues:
+  - for OpenAI-compatible gateways set:
+    - `LLM_PROVIDER=openai`
+    - `LLM_ENDPOINT=<.../v1/chat/completions>`
+    - `LLM_API_KEY=<key>`
+    - `LLM_MODEL=<model-name>`
 
 ## 7) Security Controls
 - RBAC enforced at API layer (owner/admin/agent/analyst)

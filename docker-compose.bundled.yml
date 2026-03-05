@@ -1,10 +1,36 @@
 services:
 
+
+  db:
+    image: postgres:16
+    container_name: voiceops-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-voiceops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-voiceops}
+      POSTGRES_DB: ${POSTGRES_DB:-voiceops}
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: voiceops-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata:/data
+
   backend:
     build:
       context: ./services/backend
     container_name: voiceops-backend
     restart: unless-stopped
+    depends_on:
+      - db
+      - redis
     env_file:
       - .env
     ports:
@@ -13,8 +39,6 @@ services:
       sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     volumes:
       - ./services/backend:/app
-    networks:
-      - aether_net
 
   frontend:
     build:
@@ -29,8 +53,6 @@ services:
       - '3000:3000'
     volumes:
       - ./services/frontend:/app
-    networks:
-      - aether_net
 
   prometheus:
     image: prom/prometheus:v2.55.1
@@ -40,9 +62,7 @@ services:
       - '9090:9090'
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    networks:
-      - aether_net
 
-networks:
-  aether_net:
-    external: true
+volumes:
+  pgdata:
+  redisdata:

@@ -53,19 +53,52 @@ class AgentRuntime:
                 tool_calls=[{'tool': 'booking_webhook', 'action': 'propose_time'}],
             )
 
-        if self.settings.llm_provider == 'api' and self.settings.llm_endpoint:
+        if self.settings.llm_provider in {'api', 'openai'} and self.settings.llm_endpoint:
             try:
-                payload = {
-                    'system_prompt': f'{agent.persona}\n\nPolicy:{agent.policy_config}',
-                    'user_prompt': user_text,
-                    'context': context,
-                }
                 headers = {}
                 if self.settings.llm_api_key:
                     headers['Authorization'] = f'Bearer {self.settings.llm_api_key}'
-                response = await self.http.post(self.settings.llm_endpoint, json=payload, headers=headers)
-                response.raise_for_status()
-                model_text = response.json().get('text', 'How can I help further?')
+                if self.settings.llm_provider == 'openai':
+                    payload = {
+                        'model': self.settings.llm_model,
+                        'messages': [
+                            {
+                                'role': 'system',
+                                'content': (
+                                    f'{agent.persona}\n\n'
+                                    f'Script: {agent.script}\n'
+                                    f'Policy: {agent.policy_config}\n'
+                                    f'Context: {context}'
+                                ),
+                            },
+                            {'role': 'user', 'content': user_text},
+                        ],
+                        'temperature': 0.2,
+                    }
+                    response = await self.http.post(
+                        self.settings.llm_endpoint, json=payload, headers=headers
+                    )
+                    response.raise_for_status()
+                    body = response.json()
+                    choices = body.get('choices', [])
+                    if choices:
+                        model_text = (
+                            choices[0].get('message', {}).get('content')
+                            or 'How can I help further?'
+                        )
+                    else:
+                        model_text = 'How can I help further?'
+                else:
+                    payload = {
+                        'system_prompt': f'{agent.persona}\n\nPolicy:{agent.policy_config}',
+                        'user_prompt': user_text,
+                        'context': context,
+                    }
+                    response = await self.http.post(
+                        self.settings.llm_endpoint, json=payload, headers=headers
+                    )
+                    response.raise_for_status()
+                    model_text = response.json().get('text', 'How can I help further?')
                 return AgentTurn(response_text=model_text)
             except Exception:
                 pass
