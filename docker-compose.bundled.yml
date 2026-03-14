@@ -9,8 +9,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-voiceops}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-voiceops}
       POSTGRES_DB: ${POSTGRES_DB:-voiceops}
-    ports:
-      - '5432:5432'
+    expose:
+      - '5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
 
@@ -18,8 +18,8 @@ services:
     image: redis:7-alpine
     container_name: voiceops-redis
     restart: unless-stopped
-    ports:
-      - '6379:6379'
+    expose:
+      - '6379'
     volumes:
       - redisdata:/data
 
@@ -33,8 +33,8 @@ services:
       - redis
     env_file:
       - .env
-    ports:
-      - '8000:8000'
+    expose:
+      - '8000'
     command: >
       sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000"
     volumes:
@@ -48,9 +48,9 @@ services:
     depends_on:
       - backend
     environment:
-      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8000/api/v1}
-    ports:
-      - '3000:3000'
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-/api/v1}
+    expose:
+      - '3000'
     volumes:
       - ./services/frontend:/app
       - /app/node_modules
@@ -59,8 +59,8 @@ services:
     image: prom/prometheus:v2.55.1
     container_name: voiceops-prometheus
     restart: unless-stopped
-    ports:
-      - '9090:9090'
+    expose:
+      - '9090'
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
