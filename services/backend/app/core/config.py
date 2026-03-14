@@ -28,9 +28,16 @@ class Settings(BaseSettings):
     twilio_from_number: str | None = None
     public_base_url: str = 'https://voice.aetherpro.us'
 
-    asr_endpoint: str = 'http://asr:9000/transcribe'
-    asr_streaming_endpoint: str | None = None
-    tts_endpoint: str = 'https://tts.aetherpro.us/v1/tts'
+    aether_voice_http_base: str = 'https://asr.aetherpro.us/api'
+    aether_voice_ws_base: str = 'wss://asr.aetherpro.us'
+    aether_voice_api_key: str | None = None
+    aether_voice_bearer_token: str | None = None
+    aether_voice_asr_model: str = 'auto'
+    aether_voice_asr_language: str = 'auto'
+    aether_voice_tts_model: str = 'kokoro_realtime'
+    aether_voice_tts_voice: str = 'af_sky'
+    aether_voice_tts_format: str = 'wav'
+    aether_voice_tts_sample_rate: int = 24000
 
     llm_provider: str = 'openai'
     llm_endpoint: str | None = None

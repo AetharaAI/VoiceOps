@@ -1,0 +1,9 @@
+FROM vllm/vllm-openai:v0.17.0
+
+RUN python3 -m pip install --no-cache-dir \
+    scipy==1.15.2 \
+    soundfile==0.13.1 \
+    pillow==11.1.0 \
+    torchvision==0.21.0 \
+    backoff==2.2.1 \
+    peft==0.13.2

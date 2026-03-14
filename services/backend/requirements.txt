@@ -12,6 +12,7 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 python-multipart==0.0.20
 httpx==0.28.1
+websockets==13.1
 redis==6.4.0
 slowapi==0.1.9
 python-json-logger==3.3.0

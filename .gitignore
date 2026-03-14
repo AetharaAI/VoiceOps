@@ -9,3 +9,6 @@ node_modules/
 coverage/
 .pytest_cache/
 .DS_Store
+twillo-recovery-code/
+*.pem
+*.key

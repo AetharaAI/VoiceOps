@@ -72,7 +72,7 @@ async def inbound_call(
     twiml = f"""<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <Response>
   <Connect>
-    <Stream url=\"{ws_url}\" track=\"both_tracks\" />
+    <Stream url=\"{ws_url}\" />
   </Connect>
     </Response>"""
     return Response(content=twiml, media_type='application/xml')

@@ -1,0 +1,64 @@
+version: "3.8"
+
+networks:
+  aether-ops:
+    external: true
+
+services:
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: aether-gateway
+
+    networks:
+      - aether-ops
+
+    extra_hosts:
+      - host.docker.internal:host-gateway
+
+    env_file:
+      - .env
+
+    ports:
+      - "4000:4000"
+
+    volumes:
+      - ./config.yaml:/app/config.yaml
+
+    command:
+      [
+        "--config",
+        "/app/config.yaml",
+        "--detailed_debug"
+      ]
+
+    environment:
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_INSIGHT=8180
+    depends_on:
+      - redis
+
+    restart: unless-stopped
+
+
+  redis:
+    image: redis/redis-stack:latest
+    container_name: aether-redis
+
+    ports:
+      - "6379:6379"   # Redis server
+      - "8180:8001"   # RedisInsight UI exposed at 8180
+
+    networks:
+      - aether-ops
+
+    volumes:
+      - redis_data:/data
+
+    restart: unless-stopped
+
+
+volumes:
+  redis_data:

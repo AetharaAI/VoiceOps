@@ -12,7 +12,10 @@ Multi-tenant, self-hosted voice-agent platform designed as a GoHighLevel-class c
 │   └── prometheus     # Metrics scrape config
 ├── docs
 │   ├── runbook.md
-│   └── voice-agent-blueprint.md
+│   ├── voice-agent-blueprint.md
+│   └── blue-green-runbook.md
+├── PROJECT_STATE.md   # Persistent operating context
+├── CHANGELOG.md
 ├── docker-compose.yml
 └── .env.example
 ```
@@ -43,6 +46,11 @@ docker compose up --build
 4. Create and submit form from `/forms`.
 5. Inspect calls/transcripts from `/calls`.
 6. Review KPI summary from `/analytics`.
+
+## Deployment Modes
+- `docker-compose.yml`: current active external-infra runtime.
+- `docker-compose.bundled.yml`: bundled db/redis runtime.
+- `docker-compose.blue.yml` / `docker-compose.green.yml`: blue/green rollout mode (see `docs/blue-green-runbook.md`).
 
 ## Notes
 - Telephony provider interface is swappable (`services/backend/app/services/telephony/providers.py`).

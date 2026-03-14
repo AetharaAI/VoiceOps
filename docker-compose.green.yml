@@ -1,0 +1,32 @@
+services:
+  backend:
+    build:
+      context: ./services/backend
+    container_name: voiceops-backend-green
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - '28000:8000'
+    command: >
+      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    networks:
+      - aether_net
+
+  frontend:
+    build:
+      context: ./services/frontend
+    container_name: voiceops-frontend-green
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8000/api/v1}
+    ports:
+      - '23000:3000'
+    networks:
+      - aether_net
+
+networks:
+  aether_net:
+    external: true

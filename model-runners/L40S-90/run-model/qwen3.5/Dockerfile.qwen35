@@ -1,0 +1,2 @@
+FROM vllm/vllm-openai:nightly
+RUN pip install --no-cache-dir --upgrade "transformers @ git+https://github.com/huggingface/transformers.git@main"

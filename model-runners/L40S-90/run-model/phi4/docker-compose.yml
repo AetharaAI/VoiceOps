@@ -1,0 +1,62 @@
+networks:
+  aether-ops:
+    external: true
+
+services:
+  phi-4-instruct:
+    build:
+      context: .
+      dockerfile: Dockerfile.phi4
+    image: aetherops/phi4-mm-vllm:v0.17.0
+    container_name: phi-4-instruct
+    runtime: nvidia
+    restart: unless-stopped
+    ipc: host
+
+    networks:
+      - aether-ops
+
+    env_file:
+      - path: .env
+        required: false
+
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+      HF_HOME: /hf
+      HF_HUB_CACHE: /hf/hub
+      VLLM_LOGGING_LEVEL: INFO
+
+    volumes:
+      - /mnt/aetherpro/models/voice:/models/voice
+      - /mnt/aetherpro/hf:/hf
+
+    ports:
+      - "8101:8000"
+
+    command: >
+      /models/voice/microsoft/Phi-4-multimodal-instruct
+      --host 0.0.0.0
+      --port 8000
+      --served-model-name phi-4-instruct
+      --trust-remote-code
+      --dtype auto
+      --generation-config vllm
+      --max-model-len 12800
+      --max-num-seqs 2
+      --gpu-memory-utilization 0.90
+      --enable-lora
+      --max-lora-rank 320
+      --max-loras 2
+      --limit-mm-per-prompt '{"audio":3,"image":3}'
+      --default-mm-loras '{"audio":"/models/voice/microsoft/Phi-4-multimodal-instruct/speech-lora","image":"/models/voice/microsoft/Phi-4-multimodal-instruct/vision-lora"}'
+      --uvicorn-log-level info
+      --api-key EMPTY
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]

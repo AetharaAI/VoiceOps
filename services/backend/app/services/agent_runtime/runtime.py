@@ -4,6 +4,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.models.models import Agent
+from app.services.realtime.audio import strip_control_markup
 
 ESCALATION_KEYWORDS = {'lawyer', 'sue', 'cancel now', 'human', 'manager', 'angry'}
 
@@ -99,7 +100,7 @@ class AgentRuntime:
                     )
                     response.raise_for_status()
                     model_text = response.json().get('text', 'How can I help further?')
-                return AgentTurn(response_text=model_text)
+                return AgentTurn(response_text=strip_control_markup(model_text))
             except Exception:
                 pass
 

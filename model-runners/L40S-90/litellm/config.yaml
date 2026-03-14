@@ -1,0 +1,250 @@
+############################################
+# MODELS (L40S-90 active set)
+############################################
+model_list:
+  - model_name: qwen3.5-35b
+    litellm_params:
+      model: openai/qwen3.5-35b
+      api_base: http://qwen35-35b:8000/v1
+      api_key: "EMPTY"
+      supports_images: true
+      supports_vision: true
+      supports_reasoning: true
+      supports_function_calling: true
+      model_group: "core_reasoning"
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000002
+
+  - model_name: qwen3.5-9b
+    litellm_params:
+      model: openai/qwen3.5-9b
+      api_base: http://qwen35-9b:8000/v1
+      api_key: "EMPTY"
+      supports_images: true
+      supports_vision: true
+      supports_reasoning: true
+      supports_function_calling: true
+      model_group: "core_reasoning"
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000002
+
+  - model_name: qwen3.5-4b
+    litellm_params:
+      model: openai/qwen3.5-4b
+      api_base: http://qwen35-4b:8000/v1
+      api_key: "EMPTY"
+      supports_images: true
+      supports_vision: true
+      supports_reasoning: true
+      supports_function_calling: true
+      model_group: "core_reasoning"
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000002
+
+  - model_name: jan-code-4b
+    litellm_params:
+      model: openai/jan-code-4b
+      api_base: http://jan-code-4b:8000/v1
+      api_key: "EMPTY"
+      supports_images: false
+      supports_vision: false
+      supports_reasoning: true
+      supports_function_calling: true
+      model_group: "core_reasoning"
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000002
+
+  - model_name: nanbeige4-3b-thinking
+    litellm_params:
+      model: openai/nanbeige4-3b-thinking
+      api_base: http://nanbeige4-3b-thinking:8000/v1
+      api_key: "EMPTY"
+      supports_images: false
+      supports_vision: false
+      supports_reasoning: true
+      supports_function_calling: true
+      model_group: "core_reasoning"
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000002
+
+  - model_name: minicpm-v-4.5
+    litellm_params:
+      model: openai/minicpm-v-4.5
+      api_base: http://minicpm-v:8000/v1
+      api_key: "EMPTY"
+      supports_images: true
+      supports_vision: true
+      supports_reasoning: true
+      supports_function_calling: true
+      model_group: "vision_reasoning"
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000002
+
+###########################################
+# Voice Agents: Phi-4-multimodal-instruct (vLLM) - in testing
+############################################
+
+  - model_name: phi-4-instruct
+    litellm_params:
+      model: openai/phi-4-instruct
+      api_base: http://phi-4-instruct:8000/v1
+      api_key: "EMPTY"
+      supports_images: true
+      supports_vision: true
+      supports_reasoning: true
+      supports_function_calling: true
+      model_group: "voice_reasoning"
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000002
+
+###########################################
+# GENERAL SETTINGS
+############################################
+general_settings:
+  master_key: sk-aether-sovereign-master-key-2026
+  app_id: aether-os-web
+  disable_auth: true
+  enable_key_management: true
+#  database_url: "postgresql://litellm_admin:litellm_admin_ops_2026@100.87.16.38:5440/litellm"
+#  store_model_in_db: true
+  use_redis_transaction_buffer: true
+  redis_url: redis://redis:6379/0
+
+############################################
+# ROUTER SETTINGS
+############################################
+router_settings:
+  routing_strategy: "least-busy"
+  num_retries: 3
+  timeout: 120
+  retry_after: 5
+  allowed_fails: 3
+  cooldown_time: 60
+
+  redis_host: "redis"
+  redis_port: 6379
+
+  cache_params:
+    type: "redis"
+    host: "redis"
+    port: 6379
+    namespace: "litellm.caching.caching"
+    ttl: 86400
+
+  model_group_priority:
+    - voice_reasoning
+    - core_reasoning
+    - vision_reasoning
+  model_group_weights:
+    core_reasoning: 10
+    vision_reasoning: 10
+  enable_model_group_routing: true
+  enable_pre_call_checks: true
+  enable_pre_call_cache: true
+  enable_post_call_cache: true
+
+  fallbacks:
+    - vision_reasoning: ["core_reasoning"]
+    - coding: ["core_reasoning"]
+
+############################################
+# LITELLM SETTINGS
+############################################
+litellm_settings:
+  cache: true
+  cache_params:
+    type: "redis"
+    host: "redis"
+    port: 6379
+    namespace: "litellm.caching.caching"
+    ttl: 86400
+
+  drop_params: true
+  allow_requests_on_db_unavailable: true
+  litellm_dashboard: true
+  ui: true
+  enable_prefix_caching: true
+
+############################################
+# MCP TOOLING
+############################################
+  mcp_aliases:
+    "fs": "filesystem_mcp"
+    "think": "sequential_thinking_mcp"
+    "search": "brave_search_mcp"
+    "memory": "memory_mcp"
+    "fabric": "fabric_gateway"
+
+############################################
+# MCP TOOLING (as you had it)
+############################################
+  # MCP server friendly aliases (optional shorthand)
+  mcp_aliases:
+    "fs": "filesystem_mcp"
+    "think": "sequential_thinking_mcp"
+    "search": "brave_search_mcp"
+    "memory": "memory_mcp"
+    "fabric": "fabric_gateway"
+
+############################################
+# MCP SERVERS
+# These are LIVE public MCP servers - no API key needed
+# for deepwiki and fetch. Add keys for others as noted.
+############################################
+mcp_servers:
+
+
+  # ── Filesystem MCP: Read/write local files ──
+  # Scoped to /data - change path to match your volume mount
+  filesystem_mcp:
+    transport: "stdio"
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "/aether-data"]
+    description: "Read and write local files - scoped to /aether-data"
+
+  # ── Memory MCP: Persistent key-value memory for agents ──
+  # Stores agent memory in a local JSON file
+  memory_mcp:
+    transport: "stdio"
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-memory"]
+    description: "Persistent agent memory store"
+
+  # ── Brave Search: Real web search ──
+  # Requires free Brave Search API key: https://api.search.brave.com/
+  # Free tier: 2,000 queries/month
+  brave_search_mcp:
+    transport: "stdio"
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-brave-search"]
+    env:
+      BRAVE_API_KEY: "BSAE-0AJOooREYnpP9-wOBfGaW1fl3m"
+  #   description: "Live web search via Brave Search API"
+
+  # ── Sequential Thinking: Structured reasoning tool ──
+  # Forces models to think step-by-step before answering
+  # Great for Qwen3.5-122b complex tasks
+  sequential_thinking_mcp:
+    transport: "stdio"
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    description: "Forces structured step-by-step reasoning"
+
+
+#mcp_servers:
+#  fabric-gateway:
+#    url: https://fabric.perceptor.us/mcp
+#    transport: http
+#    headers:
+#      Authorization: "Bearer dev-shared-secret"
+
+############################################
+# SEMANTIC STORE (QDRANT – correct)
+############################################
+semantic_store:
+  type: qdrant
+  host: 100.87.16.38
+  port: 6333
+  grpc_port: 6334
+  collection_name: litellm_semantic
+
