@@ -6,8 +6,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    expose:
-      - '8000'
+    ports:
+      - '127.0.0.1:28000:8000'
     command: >
       sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000"
     networks:
@@ -22,8 +22,8 @@ services:
       - backend
     environment:
       NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-/api/v1}
-    expose:
-      - '3000'
+    ports:
+      - '127.0.0.1:23000:3000'
     networks:
       - aether_net
 
