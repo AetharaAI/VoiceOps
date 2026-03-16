@@ -6,14 +6,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, get_current_user, require_roles
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.core.metrics import CALLS_COMPLETED, CALLS_STARTED
 from app.db.session import get_db
 from app.models.models import Agent, Call, CallDirection, CallStatus, TranscriptSegment, UserRole
 from app.schemas.call import CallDetailResponse, CallResponse, OutboundCallRequest, TranscriptSegmentResponse
 from app.services.audit.service import audit_log
+from app.services.telephony.telemetry import utc_now_iso
 from app.services.telephony.providers import get_telephony_provider
 
 router = APIRouter(tags=['calls'])
+logger = get_logger(__name__)
 
 
 @router.post('/calls/outbound', response_model=CallResponse)
@@ -42,7 +45,21 @@ async def create_outbound_call(
         from_number=from_number,
         to_number=payload.to_number,
         campaign_id=payload.campaign_id,
-        context_payload=payload.context_payload,
+        context_payload={
+            **payload.context_payload,
+            'telephony': {
+                **(payload.context_payload.get('telephony') or {}),
+                # Outbound calls choose the agent here in the UI/API flow. The later
+                # Twilio webhook only reuses this persisted call_id and must not
+                # re-resolve the agent from inbound number mapping.
+                'route': 'outbound',
+                'selected_agent': {
+                    'id': str(agent.id),
+                    'name': agent.name,
+                },
+                'outbound_created_at': utc_now_iso(),
+            },
+        },
     )
     db.add(call)
     await db.flush()
@@ -66,6 +83,21 @@ async def create_outbound_call(
 
     await db.commit()
     await db.refresh(call)
+    logger.info(
+        'telephony.outbound.call_created',
+        extra={
+            'correlation_id': '',
+            'tenant_id': str(call.tenant_id),
+            'call_id': str(call.id),
+            'call_sid': call.external_call_id or '',
+            'route': 'outbound',
+            'from_number': call.from_number,
+            'to_number': call.to_number,
+            'agent_id': str(agent.id),
+            'agent_name': agent.name,
+            'campaign_id': call.campaign_id or '',
+        },
+    )
     return _to_call_response(call)
 
 

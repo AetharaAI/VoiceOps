@@ -6,6 +6,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any
 
 import webrtcvad
 from fastapi import WebSocket
@@ -18,6 +19,7 @@ from app.models.models import Agent, Call, CallStatus, TranscriptSegment
 from app.services.agent_runtime.runtime import AgentTurn, agent_runtime
 from app.services.asr.client import ASRFinalTranscript, ASRStream, asr_client
 from app.services.realtime.audio import mulaw_to_pcm16, pcm16_to_mulaw, resample_pcm16, wav_to_pcm16
+from app.services.telephony.telemetry import CallTelemetry
 from app.services.tts.client import tts_client
 
 logger = get_logger(__name__)
@@ -31,6 +33,20 @@ TTS_MEDIA_CHUNK_BYTES = 640
 RECENT_FRAME_BUFFER = 10
 RECOVERY_PROMPT = 'Sorry, I missed that. Could you repeat that?'
 MAX_FIELD_RETRIES = 2
+INITIAL_DEAD_AIR_SECONDS = 6
+HELLO_LOOP_THRESHOLD = 3
+CARRIER_PROMPT_HINTS = (
+    'verification code',
+    'google voice',
+    'press 1',
+    'press any key',
+    'pin',
+    'voicemail',
+    'mailbox',
+    'call has been forwarded',
+    'record your name',
+)
+GREETING_ONLY_UTTERANCES = {'hello', 'hello?', 'hi', 'hi there', 'hey'}
 
 
 def _build_vad() -> webrtcvad.Vad:
@@ -44,6 +60,7 @@ class VoiceSession:
     call_id: str
     tenant_id: str
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    telemetry: CallTelemetry | None = None
     stream_sid: str | None = None
     tts_task: asyncio.Task | None = None
     speaking: bool = False
@@ -62,6 +79,11 @@ class VoiceSession:
     caller_turn_active: bool = False
     consecutive_voiced_frames: int = 0
     consecutive_silence_frames: int = 0
+    hello_repetitions: int = 0
+    initial_dead_air_reported: bool = False
+    tts_requests: int = 0
+    asr_turns_started: int = 0
+    llm_requests: int = 0
 
 
 class VoiceSessionManager:
@@ -76,6 +98,49 @@ class VoiceSessionManager:
     def _record_error(self, session: VoiceSession, error_code: str) -> None:
         if error_code not in session.notable_errors:
             session.notable_errors.append(error_code)
+        if session.telemetry is not None:
+            session.telemetry.add_anomaly(error_code)
+
+    def _telemetry_context(self, session: VoiceSession) -> dict[str, Any]:
+        if session.telemetry is None:
+            return {'correlation_id': '', 'tenant_id': session.tenant_id}
+        return session.telemetry.payload()
+
+    def _analyze_initial_transcript(self, *, session: VoiceSession, transcript_text: str) -> None:
+        normalized = transcript_text.strip().lower()
+        if not normalized:
+            return
+
+        if any(hint in normalized for hint in CARRIER_PROMPT_HINTS):
+            self._record_error(session, 'carrier_or_ivr_prompt_detected')
+        if normalized in GREETING_ONLY_UTTERANCES:
+            session.hello_repetitions += 1
+            if session.hello_repetitions >= HELLO_LOOP_THRESHOLD and session.telemetry is not None:
+                session.telemetry.add_anomaly(
+                    'repeated_hello_loop',
+                    transcript_text=transcript_text,
+                    hello_repetitions=session.hello_repetitions,
+                )
+        else:
+            session.hello_repetitions = 0
+
+    async def _handle_asr_event(self, *, session: VoiceSession, event: dict[str, Any]) -> None:
+        if session.telemetry is None:
+            return
+
+        event_type = event.get('type')
+        text = (event.get('text') or '').strip()
+        if event_type == 'partial_transcript' and text:
+            session.telemetry.mark('asr_first_partial', transcript_text=text)
+        elif event_type == 'final_transcript' and text:
+            session.telemetry.mark('asr_first_final', transcript_text=text)
+            if session.caller_turns == 0:
+                self._analyze_initial_transcript(session=session, transcript_text=text)
+        elif event_type == 'error':
+            session.telemetry.add_anomaly(
+                'asr_stream_error',
+                asr_error=event.get('message', 'ASR stream error'),
+            )
 
     async def _send_twilio_event(self, websocket: WebSocket, session: VoiceSession, payload: dict) -> None:
         async with session.send_lock:
@@ -97,6 +162,8 @@ class VoiceSessionManager:
                         'streamSid': session.stream_sid,
                     },
                 )
+            if session.telemetry is not None:
+                session.telemetry.add_anomaly('barge_in_detected')
 
     def _wav_chunk_to_mulaw(self, wav_chunk: bytes) -> bytes:
         try:
@@ -117,6 +184,21 @@ class VoiceSessionManager:
         async def _stream() -> None:
             session.speaking = True
             t0 = time.perf_counter()
+            session.tts_requests += 1
+            tts_request_index = session.tts_requests
+            first_chunk_logged = False
+            if session.telemetry is not None:
+                session.telemetry.log(
+                    'call.tts.request.start',
+                    tts_request_index=tts_request_index,
+                    agent_voice=getattr(tts_client.settings, 'aether_voice_tts_voice', ''),
+                    text_preview=text[:160],
+                )
+                session.telemetry.mark(
+                    'tts_request_started',
+                    agent_voice=getattr(tts_client.settings, 'aether_voice_tts_voice', ''),
+                    text_preview=text[:160],
+                )
             try:
                 async for wav_chunk in tts_client.stream_tts(
                     text=text,
@@ -125,6 +207,15 @@ class VoiceSessionManager:
                 ):
                     mulaw_audio = self._wav_chunk_to_mulaw(wav_chunk)
                     for index in range(0, len(mulaw_audio), TTS_MEDIA_CHUNK_BYTES):
+                        if session.telemetry is not None and not first_chunk_logged:
+                            first_chunk_logged = True
+                            session.telemetry.log(
+                                'call.tts.audio.first_chunk',
+                                tts_request_index=tts_request_index,
+                                chunk_bytes=len(mulaw_audio),
+                            )
+                        if session.telemetry is not None and 'tts_first_audio_chunk' not in session.telemetry.timestamps:
+                            session.telemetry.mark('tts_first_audio_chunk', chunk_bytes=len(mulaw_audio))
                         payload = base64.b64encode(mulaw_audio[index : index + TTS_MEDIA_CHUNK_BYTES]).decode()
                         await self._send_twilio_event(
                             websocket,
@@ -137,8 +228,14 @@ class VoiceSessionManager:
                         )
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as exc:
                 self._record_error(session, 'tts_stream_error')
+                if session.telemetry is not None:
+                    session.telemetry.warning(
+                        'call.tts.request.failed',
+                        error_type=type(exc).__name__,
+                        error=str(exc),
+                    )
             else:
                 await self._send_twilio_event(
                     websocket,
@@ -150,6 +247,16 @@ class VoiceSessionManager:
                     },
                 )
             finally:
+                if session.telemetry is not None:
+                    session.telemetry.log(
+                        'call.tts.request.end',
+                        tts_request_index=tts_request_index,
+                        latency_ms=round(max(0.0, (time.perf_counter() - t0) * 1000), 2),
+                    )
+                    session.telemetry.mark(
+                        'tts_request_completed',
+                        latency_ms=round(max(0.0, (time.perf_counter() - t0) * 1000), 2),
+                    )
                 TTS_LATENCY.observe(time.perf_counter() - t0)
                 session.speaking = False
 
@@ -158,10 +265,17 @@ class VoiceSessionManager:
     async def _start_asr_turn(self, *, session: VoiceSession, websocket: WebSocket) -> None:
         if session.speaking:
             await self.stop_tts_for_barge_in(websocket, session)
-        session.asr_stream = await asr_client.start_stream(call_id=session.call_id)
+        session.asr_turns_started += 1
+        session.asr_stream = await asr_client.start_stream(
+            call_id=session.call_id,
+            on_event=lambda event: self._handle_asr_event(session=session, event=event),
+        )
         session.asr_resample_state = None
         session.caller_turn_active = True
         session.consecutive_silence_frames = 0
+        if session.telemetry is not None:
+            session.telemetry.log('call.asr.stream.started', asr_turn_index=session.asr_turns_started)
+            session.telemetry.mark('asr_started')
 
     async def _send_frame_to_asr(self, session: VoiceSession, pcm_frame_8k: bytes) -> None:
         if session.asr_stream is None:
@@ -301,6 +415,7 @@ class VoiceSessionManager:
             'retry_counts': dict(session.field_retry_counts),
             'caller_turns': session.caller_turns,
             'agent_turns': session.agent_turns,
+            'telemetry': session.telemetry.snapshot() if session.telemetry is not None else {},
         }
 
     async def _finalize_call_summary(
@@ -319,6 +434,8 @@ class VoiceSessionManager:
             extra={
                 'correlation_id': '',
                 'tenant_id': session.tenant_id,
+                'call_id': str(call.id),
+                'call_sid': call.external_call_id or '',
                 'call_summary': summary,
             },
         )
@@ -342,6 +459,8 @@ class VoiceSessionManager:
             call.escalation_reason = turn.escalation_reason
             call.outcome = 'transfer_needed'
             self._record_error(session, 'transfer_requested')
+            if session.telemetry is not None:
+                session.telemetry.note_handoff_attempt(turn.escalation_reason)
 
         current_field = session.prompted_field
         if current_field and current_field in turn.missing_fields and current_field not in turn.captured_fields:
@@ -392,8 +511,14 @@ class VoiceSessionManager:
         try:
             await stream.end_stream()
             transcript = await stream.wait_for_final()
-        except Exception:
+        except Exception as exc:
             self._record_error(session, 'asr_finalization_error')
+            if session.telemetry is not None:
+                session.telemetry.warning(
+                    'call.asr.finalization.failed',
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
             transcript = None
         finally:
             ASR_LATENCY.observe(time.perf_counter() - t0)
@@ -401,6 +526,8 @@ class VoiceSessionManager:
 
         if not transcript or not transcript.text.strip():
             self._record_error(session, 'empty_transcript')
+            if session.telemetry is not None:
+                session.telemetry.add_anomaly('silence_or_dead_air_turn')
             await self._recover_missing_field(
                 websocket=websocket,
                 session=session,
@@ -411,16 +538,44 @@ class VoiceSessionManager:
             )
             return
 
+        if session.telemetry is not None and 'asr_first_final' not in session.telemetry.timestamps:
+            session.telemetry.mark('asr_first_final', transcript_text=transcript.text)
+        if session.caller_turns == 0:
+            self._analyze_initial_transcript(session=session, transcript_text=transcript.text)
+        if session.telemetry is not None:
+            session.telemetry.log(
+                'call.asr.final.received',
+                asr_turn_index=session.asr_turns_started,
+                transcript_text=transcript.text,
+                transcript_started_ms=transcript.started_ms,
+                transcript_ended_ms=transcript.ended_ms,
+            )
         await self._persist_caller_turn(session=session, db=db, call=call, transcript=transcript)
 
         t1 = time.perf_counter()
+        session.llm_requests += 1
+        if session.telemetry is not None:
+            session.telemetry.log('call.llm.turn.start', llm_request_index=session.llm_requests)
+            session.telemetry.mark('llm_request_started')
         turn = await agent_runtime.generate_response(
             agent=agent,
             user_text=transcript.text,
             context=call.context_payload,
             collected_fields=session.collected_fields,
             prompted_field=session.prompted_field,
+            telemetry_context={
+                **self._telemetry_context(session),
+                'llm_request_index': session.llm_requests,
+            },
         )
+        if session.telemetry is not None:
+            session.telemetry.log(
+                'call.llm.turn.end',
+                llm_request_index=session.llm_requests,
+                outcome=turn.outcome or '',
+                latency_ms=round(max(0.0, (time.perf_counter() - t1) * 1000), 2),
+            )
+            session.telemetry.mark('llm_request_completed', outcome=turn.outcome or '')
         LLM_LATENCY.observe(time.perf_counter() - t1)
 
         await self._handle_agent_turn(
@@ -443,6 +598,16 @@ class VoiceSessionManager:
         mulaw_audio: bytes,
     ) -> None:
         session.twilio_audio_buffer.extend(mulaw_audio)
+        if session.telemetry is not None and not session.initial_dead_air_reported:
+            elapsed_ms = session.telemetry.latency_ms_since_start('call_connected')
+            if (
+                elapsed_ms is not None
+                and elapsed_ms >= INITIAL_DEAD_AIR_SECONDS * 1000
+                and 'asr_first_partial' not in session.telemetry.timestamps
+                and 'asr_first_final' not in session.telemetry.timestamps
+            ):
+                session.initial_dead_air_reported = True
+                session.telemetry.add_anomaly('initial_dead_air')
 
         while len(session.twilio_audio_buffer) >= TWILIO_FRAME_BYTES:
             frame_mulaw = bytes(session.twilio_audio_buffer[:TWILIO_FRAME_BYTES])
@@ -513,23 +678,71 @@ class VoiceSessionManager:
             return
 
         session = await self.get_or_create(call_id, str(call.tenant_id))
+        telephony_context = (call.context_payload or {}).get('telephony', {})
+        session.telemetry = CallTelemetry(
+            call_id=str(call.id),
+            tenant_id=str(call.tenant_id),
+            route=telephony_context.get('route', call.direction.value),
+            call_sid=call.external_call_id or '',
+            from_number=call.from_number,
+            to_number=call.to_number,
+        )
+        session.telemetry.bind_agent(agent_id=str(agent.id), agent_name=agent.name)
+        session.telemetry.mark('call_connected')
+        resolver_context = telephony_context.get('resolver') or {}
+        if resolver_context.get('fallback_reason'):
+            session.telemetry.add_fallback(
+                resolver_context['fallback_reason'],
+                resolution_source=resolver_context.get('source', ''),
+            )
+        for warning in resolver_context.get('warnings') or []:
+            session.telemetry.add_anomaly(warning)
+        webhook_context = telephony_context.get('webhook') or {}
+        for warning in webhook_context.get('warnings') or []:
+            session.telemetry.add_anomaly(warning)
+        if call.from_number in {'', 'unknown'}:
+            session.telemetry.add_anomaly('missing_caller_metadata')
         call.session_id = session.session_id
         call.status = CallStatus.in_progress
         await db.commit()
+        session.telemetry.log(
+            'call.session.started',
+            stream_route=session.telemetry.route,
+            agent_persona_preview=agent.persona[:160],
+            agent_script_preview=agent.script[:160],
+        )
 
         try:
             while True:
-                event = await websocket.receive_json()
+                try:
+                    event = await websocket.receive_json()
+                except Exception as exc:
+                    self._record_error(session, 'telephony_event_parse_failure')
+                    if session.telemetry is not None:
+                        session.telemetry.warning(
+                            'call.telephony.event_parse_failed',
+                            error_type=type(exc).__name__,
+                            error=str(exc),
+                        )
+                    raise
                 event_type = event.get('event')
 
                 if event_type == 'start':
                     session.stream_sid = event.get('start', {}).get('streamSid')
                     if session.stream_sid:
+                        session.telemetry.mark('stream_started', stream_sid=session.stream_sid)
                         opening_turn = agent_runtime.build_opening_prompt(
                             agent=agent,
                             collected_fields=session.collected_fields,
                         )
                         session.prompted_field = opening_turn.prompted_field
+                        session.telemetry.log(
+                            'call.opening.loaded',
+                            opening_prompt=opening_turn.response_text,
+                            prompted_field=opening_turn.prompted_field or '',
+                            agent_persona_preview=agent.persona[:160],
+                            agent_script_preview=agent.script[:160],
+                        )
                         await self._persist_agent_turn(
                             session=session,
                             db=db,
@@ -552,6 +765,8 @@ class VoiceSessionManager:
                         await db.commit()
                 elif event_type == 'dtmf':
                     digit = event.get('dtmf', {}).get('digit')
+                    if session.telemetry is not None:
+                        session.telemetry.add_anomaly('dtmf_received', digit=digit or '')
                     db.add(
                         TranscriptSegment(
                             tenant_id=session.tenant_id,
@@ -573,16 +788,25 @@ class VoiceSessionManager:
                     if call.status != CallStatus.escalated:
                         call.status = CallStatus.completed
                     call.ended_at = datetime.now(timezone.utc)
+                    if session.telemetry is not None:
+                        session.telemetry.mark('call_ended', terminal_status=call.status.value)
                     await db.commit()
                     break
+                else:
+                    if session.telemetry is not None:
+                        session.telemetry.add_anomaly('unknown_telephony_event', event_type=event_type or '')
         except Exception:
             self._record_error(session, 'call_loop_exception')
             call.status = CallStatus.failed
             call.ended_at = datetime.now(timezone.utc)
+            if session.telemetry is not None:
+                session.telemetry.mark('call_ended', terminal_status=call.status.value)
             await db.commit()
         finally:
             if call.ended_at is None:
                 call.ended_at = datetime.now(timezone.utc)
+            if session.telemetry is not None and 'call_ended' not in session.telemetry.timestamps:
+                session.telemetry.mark('call_ended', terminal_status=call.status.value)
             await self._finalize_call_summary(db=db, call=call, agent=agent, session=session)
             if session.tts_task and not session.tts_task.done():
                 session.tts_task.cancel()

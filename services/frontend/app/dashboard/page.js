@@ -6,6 +6,7 @@ import { api } from '../../lib/api';
 
 export default function DashboardPage() {
   const [tenant, setTenant] = useState(null);
+  const [agents, setAgents] = useState([]);
   const [phoneNumbers, setPhoneNumbers] = useState([]);
   const [businessHours, setBusinessHours] = useState([]);
   const [routingRules, setRoutingRules] = useState([]);
@@ -18,13 +19,15 @@ export default function DashboardPage() {
 
   async function load() {
     try {
-      const [tenantData, pn, bh, rr] = await Promise.all([
+      const [tenantData, agentList, pn, bh, rr] = await Promise.all([
         api('/tenants/me'),
+        api('/agents'),
         api('/phone-numbers'),
         api('/business-hours'),
         api('/routing-rules')
       ]);
       setTenant(tenantData);
+      setAgents(agentList);
       setPhoneNumbers(pn);
       setBusinessHours(bh);
       setRoutingRules(rr);
@@ -46,11 +49,13 @@ export default function DashboardPage() {
       });
       setForm({ phone_number: '', provider: 'twilio', agent_id: '' });
       await load();
-      setMessage('Phone number saved.');
+      setMessage('Phone number mapping saved.');
     } catch (err) {
       setMessage(err.message);
     }
   }
+
+  const agentNameById = Object.fromEntries(agents.map((agent) => [agent.id, agent.name]));
 
   return (
     <main className="container">
@@ -82,19 +87,37 @@ export default function DashboardPage() {
               value={form.provider}
               onChange={(e) => setForm({ ...form, provider: e.target.value })}
             />
-            <label>Default Agent ID</label>
-            <input
+            <label>Inbound Agent</label>
+            <select
               value={form.agent_id}
               onChange={(e) => setForm({ ...form, agent_id: e.target.value })}
-            />
+            >
+              <option value="">No agent selected</option>
+              {agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
             <button type="submit">Save Number</button>
           </form>
+          <p>Saving an existing number updates its inbound mapping.</p>
         </section>
       </div>
 
       <section className="card">
         <h2>Configured Numbers</h2>
-        <pre>{JSON.stringify(phoneNumbers, null, 2)}</pre>
+        {phoneNumbers.length === 0 ? (
+          <p>No phone numbers configured.</p>
+        ) : (
+          <ul>
+            {phoneNumbers.map((row) => (
+              <li key={row.id}>
+                {row.phone_number} ({row.provider}) -> {agentNameById[row.agent_id] || row.agent_id || 'Unassigned'}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <div className="grid-2">

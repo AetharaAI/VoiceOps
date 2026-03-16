@@ -4,8 +4,11 @@ from dataclasses import dataclass, field
 import httpx
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.models.models import Agent
 from app.services.realtime.audio import strip_control_markup
+
+logger = get_logger(__name__)
 
 ESCALATION_KEYWORDS = {'lawyer', 'sue', 'cancel now', 'human', 'manager', 'angry'}
 GENERIC_NOISE = {'yes', 'yeah', 'yep', 'no', 'nope', 'hello', 'hi', 'okay', 'ok', 'sure'}
@@ -90,6 +93,7 @@ class AgentRuntime:
         context: dict,
         collected_fields: dict,
         prompted_field: str | None = None,
+        telemetry_context: dict | None = None,
     ) -> AgentTurn:
         lowered = user_text.lower()
         if any(keyword in lowered for keyword in ESCALATION_KEYWORDS):
@@ -133,6 +137,15 @@ class AgentRuntime:
                 headers = {}
                 if self.settings.llm_api_key:
                     headers['Authorization'] = f'Bearer {self.settings.llm_api_key}'
+                if telemetry_context:
+                    logger.info(
+                        'call.llm.request.start',
+                        extra={
+                            **telemetry_context,
+                            'llm_provider': self.settings.llm_provider,
+                            'llm_model': self.settings.llm_model,
+                        },
+                    )
                 if self.settings.llm_provider == 'openai':
                     payload = {
                         'model': self.settings.llm_model,
@@ -168,13 +181,33 @@ class AgentRuntime:
                     response = await self.http.post(self.settings.llm_endpoint, json=payload, headers=headers)
                     response.raise_for_status()
                     model_text = response.json().get('text', 'How can I help further?')
+                if telemetry_context:
+                    logger.info(
+                        'call.llm.request.end',
+                        extra={
+                            **telemetry_context,
+                            'llm_provider': self.settings.llm_provider,
+                            'llm_model': self.settings.llm_model,
+                            'llm_output_chars': len(model_text),
+                        },
+                    )
                 return AgentTurn(
                     response_text=strip_control_markup(model_text),
                     captured_fields=captured_fields,
                     outcome='success',
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                if telemetry_context:
+                    logger.warning(
+                        'call.llm.request.failed',
+                        extra={
+                            **telemetry_context,
+                            'llm_provider': self.settings.llm_provider,
+                            'llm_model': self.settings.llm_model,
+                            'error_type': type(exc).__name__,
+                            'error': str(exc),
+                        },
+                    )
 
         return AgentTurn(
             response_text='Thank you. I have the details I need for now. What else can I help you with today?',

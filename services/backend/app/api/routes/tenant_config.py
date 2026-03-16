@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, get_current_user, require_roles
 from app.db.session import get_db
-from app.models.models import BusinessHours, PhoneNumber, RoutingRule, UserRole
+from app.models.models import Agent, BusinessHours, PhoneNumber, RoutingRule, UserRole
 from app.schemas.tenant_config import (
     BusinessHourEntry,
     PhoneNumberCreate,
@@ -14,6 +14,7 @@ from app.schemas.tenant_config import (
     RoutingRuleCreate,
     RoutingRuleResponse,
 )
+from app.services.telephony.inbound_routing import normalize_phone_number, phone_number_matches
 
 router = APIRouter(tags=['tenant-config'])
 
@@ -40,13 +41,34 @@ async def create_phone_number(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_roles(UserRole.owner, UserRole.admin)),
 ) -> PhoneNumberResponse:
-    row = PhoneNumber(
-        tenant_id=current_user.tenant_id,
-        phone_number=payload.phone_number,
-        provider=payload.provider,
-        agent_id=payload.agent_id,
-    )
-    db.add(row)
+    normalized_number = normalize_phone_number(payload.phone_number)
+    if not normalized_number:
+        raise HTTPException(status_code=400, detail='Phone number must contain at least 10 digits')
+
+    if payload.agent_id:
+        agent = (
+            await db.execute(select(Agent).where(Agent.id == payload.agent_id, Agent.tenant_id == current_user.tenant_id))
+        ).scalar_one_or_none()
+        if not agent:
+            raise HTTPException(status_code=404, detail='Agent not found for phone number mapping')
+
+    existing_rows = (
+        await db.execute(select(PhoneNumber).where(PhoneNumber.tenant_id == current_user.tenant_id))
+    ).scalars().all()
+    row = next((existing for existing in existing_rows if phone_number_matches(existing.phone_number, normalized_number)), None)
+    if row is None:
+        row = PhoneNumber(
+            tenant_id=current_user.tenant_id,
+            phone_number=normalized_number,
+            provider=payload.provider,
+            agent_id=payload.agent_id,
+        )
+        db.add(row)
+    else:
+        row.phone_number = normalized_number
+        row.provider = payload.provider
+        row.agent_id = payload.agent_id
+
     await db.commit()
     await db.refresh(row)
     return PhoneNumberResponse(

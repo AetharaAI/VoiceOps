@@ -1,8 +1,10 @@
 import asyncio
 import base64
 import contextlib
+import inspect
 import json
 from dataclasses import dataclass, field
+from typing import Awaitable, Callable
 from typing import Any
 from urllib.parse import urljoin
 
@@ -30,9 +32,11 @@ class ASRStream:
         *,
         websocket: websockets.WebSocketClientProtocol,
         session_id: str,
+        on_event: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
     ) -> None:
         self.websocket = websocket
         self.session_id = session_id
+        self.on_event = on_event
         self.listener_task: asyncio.Task | None = None
         self.final_transcript: asyncio.Future[ASRFinalTranscript] = asyncio.get_running_loop().create_future()
         self.seq = 0
@@ -92,7 +96,12 @@ class ASRClient:
             return ws_url
         return urljoin(self.settings.aether_voice_ws_base.rstrip('/') + '/', ws_url.lstrip('/'))
 
-    async def start_stream(self, *, call_id: str) -> ASRStream:
+    async def start_stream(
+        self,
+        *,
+        call_id: str,
+        on_event: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
+    ) -> ASRStream:
         payload = {
             'model': self.settings.aether_voice_asr_model,
             'language': self.settings.aether_voice_asr_language,
@@ -121,7 +130,7 @@ class ASRClient:
             extra_headers=self._auth_headers(),
             max_size=None,
         )
-        stream = ASRStream(websocket=websocket, session_id=body['session_id'])
+        stream = ASRStream(websocket=websocket, session_id=body['session_id'], on_event=on_event)
         stream.listener_task = asyncio.create_task(self._listen(stream=stream, websocket=websocket))
         return stream
 
@@ -136,6 +145,10 @@ class ASRClient:
                 event = json.loads(message)
                 if stream is None:
                     continue
+                if stream.on_event is not None:
+                    maybe_awaitable = stream.on_event(event)
+                    if inspect.isawaitable(maybe_awaitable):
+                        await maybe_awaitable
                 event_type = event.get('type')
                 if event_type == 'final_transcript' and not stream.final_transcript.done():
                     segments = event.get('segments') or []
