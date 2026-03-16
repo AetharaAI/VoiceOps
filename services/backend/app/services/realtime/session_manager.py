@@ -5,27 +5,32 @@ import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 import webrtcvad
 from fastapi import WebSocket
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.core.metrics import ASR_LATENCY, LLM_LATENCY, TTS_LATENCY
 from app.models.models import Agent, Call, CallStatus, TranscriptSegment
-from app.services.agent_runtime.runtime import agent_runtime
+from app.services.agent_runtime.runtime import AgentTurn, agent_runtime
 from app.services.asr.client import ASRFinalTranscript, ASRStream, asr_client
 from app.services.realtime.audio import mulaw_to_pcm16, pcm16_to_mulaw, resample_pcm16, wav_to_pcm16
 from app.services.tts.client import tts_client
+
+logger = get_logger(__name__)
 
 TWILIO_FRAME_BYTES = 160
 TWILIO_SAMPLE_RATE = 8000
 ASR_SAMPLE_RATE = 16000
 MIN_SPEECH_FRAMES = 2
-END_OF_TURN_SILENCE_FRAMES = 40
+END_OF_TURN_SILENCE_FRAMES = 30
 TTS_MEDIA_CHUNK_BYTES = 640
 RECENT_FRAME_BUFFER = 10
-RECOVERY_PROMPT = 'I did not catch that clearly. Please say that once more.'
+RECOVERY_PROMPT = 'Sorry, I missed that. Could you repeat that?'
+MAX_FIELD_RETRIES = 2
 
 
 def _build_vad() -> webrtcvad.Vad:
@@ -42,7 +47,12 @@ class VoiceSession:
     stream_sid: str | None = None
     tts_task: asyncio.Task | None = None
     speaking: bool = False
-    collected_fields: dict = field(default_factory=dict)
+    collected_fields: dict[str, str] = field(default_factory=dict)
+    prompted_field: str | None = None
+    field_retry_counts: dict[str, int] = field(default_factory=dict)
+    notable_errors: list[str] = field(default_factory=list)
+    caller_turns: int = 0
+    agent_turns: int = 0
     send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     vad: webrtcvad.Vad = field(default_factory=_build_vad)
     twilio_audio_buffer: bytearray = field(default_factory=bytearray)
@@ -63,6 +73,10 @@ class VoiceSessionManager:
             self.sessions[call_id] = VoiceSession(call_id=call_id, tenant_id=tenant_id)
         return self.sessions[call_id]
 
+    def _record_error(self, session: VoiceSession, error_code: str) -> None:
+        if error_code not in session.notable_errors:
+            session.notable_errors.append(error_code)
+
     async def _send_twilio_event(self, websocket: WebSocket, session: VoiceSession, payload: dict) -> None:
         async with session.send_lock:
             await websocket.send_json(payload)
@@ -73,6 +87,7 @@ class VoiceSessionManager:
             with contextlib.suppress(asyncio.CancelledError):
                 await session.tts_task
             session.speaking = False
+            self._record_error(session, 'barge_in')
             if session.stream_sid:
                 await self._send_twilio_event(
                     websocket,
@@ -123,7 +138,7 @@ class VoiceSessionManager:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                pass
+                self._record_error(session, 'tts_stream_error')
             else:
                 await self._send_twilio_event(
                     websocket,
@@ -178,6 +193,7 @@ class VoiceSessionManager:
                 ended_ms=transcript.ended_ms,
             )
         )
+        session.caller_turns += 1
         await db.flush()
 
     async def _persist_agent_turn(
@@ -197,7 +213,155 @@ class VoiceSessionManager:
                 is_final=True,
             )
         )
+        session.agent_turns += 1
         await db.flush()
+
+    def _next_missing_field(
+        self,
+        *,
+        agent: Agent,
+        session: VoiceSession,
+        skip_field: str | None = None,
+    ) -> str | None:
+        missing_fields = agent_runtime.missing_required_fields(agent=agent, collected_fields=session.collected_fields)
+        for field_name in missing_fields:
+            if field_name != skip_field:
+                return field_name
+        return None
+
+    async def _recover_missing_field(
+        self,
+        *,
+        websocket: WebSocket,
+        session: VoiceSession,
+        db: AsyncSession,
+        agent: Agent,
+        call: Call,
+        current_field: str | None,
+    ) -> None:
+        if not current_field:
+            await self._persist_agent_turn(session=session, db=db, call=call, text=RECOVERY_PROMPT)
+            await self.send_tts(websocket, session, agent, RECOVERY_PROMPT)
+            return
+
+        retry_count = session.field_retry_counts.get(current_field, 0) + 1
+        session.field_retry_counts[current_field] = retry_count
+        self._record_error(session, f'{current_field}_retry_{retry_count}')
+
+        if retry_count <= MAX_FIELD_RETRIES:
+            prompt = agent_runtime.build_retry_prompt(
+                agent=agent,
+                field_name=current_field,
+                retry_count=retry_count,
+            )
+            session.prompted_field = current_field
+        else:
+            self._record_error(session, f'{current_field}_capture_exhausted')
+            next_field = self._next_missing_field(agent=agent, session=session, skip_field=current_field)
+            prompt = agent_runtime.build_skip_ahead_prompt(
+                agent=agent,
+                field_name=current_field,
+                next_field=next_field,
+            )
+            session.prompted_field = next_field
+
+        await self._persist_agent_turn(session=session, db=db, call=call, text=prompt)
+        await self.send_tts(websocket, session, agent, prompt)
+
+    def _determine_disposition(self, *, call: Call, agent: Agent, session: VoiceSession) -> str:
+        if call.status == CallStatus.escalated or call.outcome == 'transfer_needed':
+            return 'transfer_needed'
+
+        missing_fields = agent_runtime.missing_required_fields(agent=agent, collected_fields=session.collected_fields)
+        if not (agent.required_fields or {}):
+            return call.outcome or 'success'
+        if not missing_fields:
+            return 'success'
+        if session.collected_fields:
+            return 'partial_intake'
+        return 'failed_intake'
+
+    def _build_call_summary(self, *, call: Call, agent: Agent, session: VoiceSession) -> dict:
+        ended_at = call.ended_at or datetime.now(timezone.utc)
+        duration_seconds = None
+        if call.started_at and ended_at:
+            duration_seconds = round(max(0.0, (ended_at - call.started_at).total_seconds()), 2)
+
+        disposition = self._determine_disposition(call=call, agent=agent, session=session)
+        missing_fields = agent_runtime.missing_required_fields(agent=agent, collected_fields=session.collected_fields)
+
+        return {
+            'call_id': str(call.id),
+            'timestamp': ended_at.isoformat(),
+            'duration_seconds': duration_seconds,
+            'fields_captured': dict(session.collected_fields),
+            'missing_fields': missing_fields,
+            'final_disposition': disposition,
+            'notable_errors': list(session.notable_errors),
+            'retry_counts': dict(session.field_retry_counts),
+            'caller_turns': session.caller_turns,
+            'agent_turns': session.agent_turns,
+        }
+
+    async def _finalize_call_summary(
+        self,
+        *,
+        db: AsyncSession,
+        call: Call,
+        agent: Agent,
+        session: VoiceSession,
+    ) -> None:
+        summary = self._build_call_summary(call=call, agent=agent, session=session)
+        call.outcome = summary['final_disposition']
+        call.outcome_tags = summary
+        logger.info(
+            'call.summary',
+            extra={
+                'correlation_id': '',
+                'tenant_id': session.tenant_id,
+                'call_summary': summary,
+            },
+        )
+        await db.commit()
+
+    async def _handle_agent_turn(
+        self,
+        *,
+        websocket: WebSocket,
+        session: VoiceSession,
+        db: AsyncSession,
+        agent: Agent,
+        call: Call,
+        turn: AgentTurn,
+    ) -> None:
+        for field_name in turn.captured_fields.keys():
+            session.field_retry_counts[field_name] = 0
+
+        if turn.should_escalate:
+            call.status = CallStatus.escalated
+            call.escalation_reason = turn.escalation_reason
+            call.outcome = 'transfer_needed'
+            self._record_error(session, 'transfer_requested')
+
+        current_field = session.prompted_field
+        if current_field and current_field in turn.missing_fields and current_field not in turn.captured_fields:
+            if not turn.captured_fields:
+                await self._recover_missing_field(
+                    websocket=websocket,
+                    session=session,
+                    db=db,
+                    agent=agent,
+                    call=call,
+                    current_field=current_field,
+                )
+                return
+
+        session.prompted_field = turn.prompted_field
+        if turn.outcome:
+            call.outcome = turn.outcome
+
+        await self._persist_agent_turn(session=session, db=db, call=call, text=turn.response_text)
+        await self.send_tts(websocket, session, agent, turn.response_text)
 
     async def finalize_caller_turn(
         self,
@@ -229,13 +393,22 @@ class VoiceSessionManager:
             await stream.end_stream()
             transcript = await stream.wait_for_final()
         except Exception:
+            self._record_error(session, 'asr_finalization_error')
             transcript = None
         finally:
             ASR_LATENCY.observe(time.perf_counter() - t0)
             await stream.close()
 
-        if not transcript or not transcript.text:
-            await self.send_tts(websocket, session, agent, RECOVERY_PROMPT)
+        if not transcript or not transcript.text.strip():
+            self._record_error(session, 'empty_transcript')
+            await self._recover_missing_field(
+                websocket=websocket,
+                session=session,
+                db=db,
+                agent=agent,
+                call=call,
+                current_field=session.prompted_field,
+            )
             return
 
         await self._persist_caller_turn(session=session, db=db, call=call, transcript=transcript)
@@ -246,17 +419,18 @@ class VoiceSessionManager:
             user_text=transcript.text,
             context=call.context_payload,
             collected_fields=session.collected_fields,
+            prompted_field=session.prompted_field,
         )
         LLM_LATENCY.observe(time.perf_counter() - t1)
 
-        if turn.should_escalate:
-            call.status = CallStatus.escalated
-            call.escalation_reason = turn.escalation_reason
-        if turn.outcome:
-            call.outcome = turn.outcome
-
-        await self._persist_agent_turn(session=session, db=db, call=call, text=turn.response_text)
-        await self.send_tts(websocket, session, agent, turn.response_text)
+        await self._handle_agent_turn(
+            websocket=websocket,
+            session=session,
+            db=db,
+            agent=agent,
+            call=call,
+            turn=turn,
+        )
 
     async def process_audio_frame(
         self,
@@ -332,10 +506,7 @@ class VoiceSessionManager:
             await websocket.close(code=4404)
             return
 
-        agent_stmt = select(Agent).where(
-            Agent.id == call.agent_id,
-            Agent.tenant_id == call.tenant_id,
-        )
+        agent_stmt = select(Agent).where(Agent.id == call.agent_id, Agent.tenant_id == call.tenant_id)
         agent = (await db.execute(agent_stmt)).scalar_one_or_none()
         if not agent:
             await websocket.close(code=4404)
@@ -354,12 +525,19 @@ class VoiceSessionManager:
                 if event_type == 'start':
                     session.stream_sid = event.get('start', {}).get('streamSid')
                     if session.stream_sid:
-                        await self.send_tts(
-                            websocket,
-                            session,
-                            agent,
-                            f'Hello, this is {agent.name}. How can I help today?',
+                        opening_turn = agent_runtime.build_opening_prompt(
+                            agent=agent,
+                            collected_fields=session.collected_fields,
                         )
+                        session.prompted_field = opening_turn.prompted_field
+                        await self._persist_agent_turn(
+                            session=session,
+                            db=db,
+                            call=call,
+                            text=opening_turn.response_text,
+                        )
+                        await self.send_tts(websocket, session, agent, opening_turn.response_text)
+                        await db.commit()
                 elif event_type == 'media':
                     payload = event.get('media', {}).get('payload', '')
                     if payload:
@@ -392,13 +570,20 @@ class VoiceSessionManager:
                         agent=agent,
                         call=call,
                     )
-                    call.status = CallStatus.completed
+                    if call.status != CallStatus.escalated:
+                        call.status = CallStatus.completed
+                    call.ended_at = datetime.now(timezone.utc)
                     await db.commit()
                     break
         except Exception:
+            self._record_error(session, 'call_loop_exception')
             call.status = CallStatus.failed
+            call.ended_at = datetime.now(timezone.utc)
             await db.commit()
         finally:
+            if call.ended_at is None:
+                call.ended_at = datetime.now(timezone.utc)
+            await self._finalize_call_summary(db=db, call=call, agent=agent, session=session)
             if session.tts_task and not session.tts_task.done():
                 session.tts_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):

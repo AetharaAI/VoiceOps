@@ -26,6 +26,7 @@ class CallResponse(BaseModel):
     campaign_id: str | None
     context_payload: dict[str, Any]
     outcome: str | None
+    outcome_tags: dict[str, Any]
     escalation_reason: str | None
     started_at: datetime | None
     ended_at: datetime | None

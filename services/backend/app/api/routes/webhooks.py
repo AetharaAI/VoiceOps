@@ -113,7 +113,14 @@ async def call_status(
         'failed': CallStatus.failed,
         'busy': CallStatus.failed,
     }
-    call.status = status_map.get(call_status, call.status)
+    next_status = status_map.get(call_status)
+    terminal_statuses = {CallStatus.completed, CallStatus.failed, CallStatus.no_answer, CallStatus.escalated}
+    if next_status:
+        if call.status in terminal_statuses and next_status not in terminal_statuses:
+            next_status = call.status
+        if call.status == CallStatus.escalated and next_status == CallStatus.completed:
+            next_status = CallStatus.escalated
+        call.status = next_status
     if call.status in {CallStatus.completed, CallStatus.failed, CallStatus.no_answer}:
         call.ended_at = datetime.now(timezone.utc)
     await db.commit()

@@ -137,6 +137,7 @@ def _to_call_response(call: Call) -> CallResponse:
         campaign_id=call.campaign_id,
         context_payload=call.context_payload,
         outcome=call.outcome,
+        outcome_tags=call.outcome_tags,
         escalation_reason=call.escalation_reason,
         started_at=call.started_at,
         ended_at=call.ended_at,

@@ -111,6 +111,15 @@ export default function CallsPage() {
 
       <section className="card">
         <h2>Selected Call Detail</h2>
+        {selectedCall?.outcome_tags ? (
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div><strong>Disposition:</strong> {selectedCall.outcome_tags.final_disposition || selectedCall.outcome || 'unknown'}</div>
+            <div><strong>Duration:</strong> {selectedCall.outcome_tags.duration_seconds ?? 'n/a'}s</div>
+            <div><strong>Captured:</strong> {Object.keys(selectedCall.outcome_tags.fields_captured || {}).join(', ') || 'none'}</div>
+            <div><strong>Missing:</strong> {(selectedCall.outcome_tags.missing_fields || []).join(', ') || 'none'}</div>
+            <div><strong>Errors:</strong> {(selectedCall.outcome_tags.notable_errors || []).join(', ') || 'none'}</div>
+          </div>
+        ) : null}
         <pre>{JSON.stringify(selectedCall, null, 2)}</pre>
       </section>
 
