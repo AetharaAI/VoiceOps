@@ -110,3 +110,24 @@ def test_mark_event_is_passthrough(monkeypatch) -> None:
         'media_stream_event': 'mark',
         'mark_name': 'tts-chunk-finished',
     }
+
+
+def test_retry_reason_prefers_partial_unclear_when_partial_exists() -> None:
+    manager = VoiceSessionManager()
+    session = VoiceSession(call_id='call-123', tenant_id='tenant-123')
+    session.last_asr_partial = 'hel'
+
+    reason = manager._retry_reason_from_transcript(session=session, transcript_text='')
+
+    assert reason == 'partial_unclear_speech'
+
+
+def test_retry_reason_prefers_interruption_flag() -> None:
+    manager = VoiceSessionManager()
+    session = VoiceSession(call_id='call-123', tenant_id='tenant-123')
+    session.interrupted_turn = True
+    session.last_asr_partial = 'hello'
+
+    reason = manager._retry_reason_from_transcript(session=session, transcript_text='hello?')
+
+    assert reason == 'caller_interruption'

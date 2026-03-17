@@ -5,8 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUser, get_current_user, require_roles
 from app.db.session import get_db
 from app.models.models import Agent, UserRole
-from app.schemas.agent import AgentCreate, AgentResponse, AgentUpdateConfig
+from app.schemas.agent import AgentCreate, AgentResponse, AgentUpdateConfig, TTSVoiceOption
 from app.services.audit.service import audit_log
+from app.services.tts.voice_registry import list_tts_voices
 
 router = APIRouter(tags=['agents'])
 
@@ -76,6 +77,14 @@ async def list_agents(
         )
         for agent in rows
     ]
+
+
+@router.get('/tts/voices', response_model=list[TTSVoiceOption])
+async def list_supported_tts_voices(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[TTSVoiceOption]:
+    _ = current_user
+    return [TTSVoiceOption(**voice) for voice in list_tts_voices()]
 
 
 @router.put('/agents/{agent_id}/config', response_model=AgentResponse)

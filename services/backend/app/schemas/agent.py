@@ -32,3 +32,12 @@ class AgentResponse(BaseModel):
     tools_config: dict[str, Any]
     policy_config: dict[str, Any]
     workflow_dsl: dict[str, Any]
+
+
+class TTSVoiceOption(BaseModel):
+    id: str
+    label: str
+    gender: str
+    style_tag: str
+    family: str
+    is_default: bool = False

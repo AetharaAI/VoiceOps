@@ -22,12 +22,20 @@ const MODEL_OPTIONS = [
   'phi-4-instruct'
 ];
 
-const VOICE_OPTIONS = [
-  { value: 'af_bella', label: 'af_bella (Default)' },
-  { value: 'af_nicole', label: 'af_nicole' },
-  { value: 'af_sky', label: 'af_sky' },
-  { value: '__custom__', label: 'Custom Voice' }
+const DEFAULT_VOICE_OPTIONS = [
+  { id: 'af_bella', label: 'Bella', family: 'kokoro_realtime', gender: 'female', style_tag: 'warm', is_default: true },
+  { id: 'af_heart', label: 'Heart', family: 'kokoro_realtime', gender: 'female', style_tag: 'bright', is_default: false },
+  { id: 'af_nicole', label: 'Nicole', family: 'kokoro_realtime', gender: 'female', style_tag: 'confident', is_default: false },
+  { id: 'af_sarah', label: 'Sarah', family: 'kokoro_realtime', gender: 'female', style_tag: 'clear', is_default: false },
+  { id: 'af_sky', label: 'Sky', family: 'kokoro_realtime', gender: 'female', style_tag: 'neutral', is_default: false },
+  { id: 'am_adam', label: 'Adam', family: 'kokoro_realtime', gender: 'male', style_tag: 'steady', is_default: false },
+  { id: 'am_michael', label: 'Michael', family: 'kokoro_realtime', gender: 'male', style_tag: 'clear', is_default: false },
+  { id: 'bf_emma', label: 'Emma', family: 'kokoro_realtime', gender: 'female', style_tag: 'british', is_default: false },
+  { id: 'bf_isabella', label: 'Isabella', family: 'kokoro_realtime', gender: 'female', style_tag: 'british', is_default: false },
+  { id: 'bm_george', label: 'George', family: 'kokoro_realtime', gender: 'male', style_tag: 'british', is_default: false },
+  { id: 'bm_lewis', label: 'Lewis', family: 'kokoro_realtime', gender: 'male', style_tag: 'british', is_default: false }
 ];
+const CUSTOM_VOICE_OPTION = { id: '__custom__', label: 'Custom Voice' };
 
 const seedRequiredFields = {
   name: { prompt: 'Can I have your full name?' },
@@ -85,10 +93,19 @@ function runtimeConfigFromAgent(agent) {
   return agent?.policy_config?.runtime || {};
 }
 
-function formFromAgent(agent) {
+function buildVoiceOptions(voices) {
+  return [...voices, CUSTOM_VOICE_OPTION];
+}
+
+function voiceLabel(voice) {
+  const suffix = [voice.gender, voice.style_tag].filter(Boolean).join(', ');
+  return voice.is_default ? `${voice.label} (${voice.id}, default)` : `${voice.label} (${voice.id}${suffix ? `, ${suffix}` : ''})`;
+}
+
+function formFromAgent(agent, voices) {
   const runtime = runtimeConfigFromAgent(agent);
   const ttsVoice = runtime.tts_voice || 'af_bella';
-  const hasPresetVoice = VOICE_OPTIONS.some((option) => option.value === ttsVoice);
+  const hasPresetVoice = voices.some((option) => option.id === ttsVoice);
 
   return {
     name: agent.name,
@@ -135,6 +152,7 @@ function buildAgentPayload(form) {
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState([]);
+  const [voices, setVoices] = useState(DEFAULT_VOICE_OPTIONS);
   const [message, setMessage] = useState('');
   const [editingAgentId, setEditingAgentId] = useState('');
   const [form, setForm] = useState(emptyForm());
@@ -145,8 +163,16 @@ export default function AgentsPage() {
 
   async function load() {
     try {
-      const data = await api('/agents');
-      setAgents(data);
+      const [agentResult, voiceResult] = await Promise.allSettled([api('/agents'), api('/tts/voices')]);
+      if (agentResult.status !== 'fulfilled') {
+        throw agentResult.reason;
+      }
+      setAgents(agentResult.value);
+      if (voiceResult.status === 'fulfilled' && Array.isArray(voiceResult.value) && voiceResult.value.length) {
+        setVoices(voiceResult.value);
+      } else {
+        setVoices(DEFAULT_VOICE_OPTIONS);
+      }
     } catch (err) {
       setMessage(err.message);
     }
@@ -191,9 +217,11 @@ export default function AgentsPage() {
 
   function loadIntoEditor(agent) {
     setEditingAgentId(agent.id);
-    setForm(formFromAgent(agent));
+    setForm(formFromAgent(agent, voices));
     setMessage(`Loaded ${agent.name} into editor.`);
   }
+
+  const voiceOptions = buildVoiceOptions(voices);
 
   return (
     <main className="container">
@@ -222,9 +250,9 @@ export default function AgentsPage() {
               value={form.tts_voice_select}
               onChange={(e) => setForm({ ...form, tts_voice_select: e.target.value })}
             >
-              {VOICE_OPTIONS.map((voice) => (
-                <option key={voice.value} value={voice.value}>
-                  {voice.label}
+              {voiceOptions.map((voice) => (
+                <option key={voice.id} value={voice.id}>
+                  {voice.id === '__custom__' ? voice.label : voiceLabel(voice)}
                 </option>
               ))}
             </select>

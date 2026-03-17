@@ -40,6 +40,7 @@ TTS_MEDIA_CHUNK_BYTES = 640
 RECENT_FRAME_BUFFER = 10
 RECOVERY_PROMPT = 'Sorry, I missed that. Could you repeat that?'
 MAX_FIELD_RETRIES = 2
+MAX_CONSECUTIVE_RECOVERY_TURNS = 4
 INITIAL_DEAD_AIR_SECONDS = 6
 HELLO_LOOP_THRESHOLD = 3
 CARRIER_PROMPT_HINTS = (
@@ -91,6 +92,12 @@ class VoiceSession:
     tts_requests: int = 0
     asr_turns_started: int = 0
     llm_requests: int = 0
+    last_asr_partial: str = ''
+    last_asr_final: str = ''
+    last_recovery_prompt: str = ''
+    last_retry_reason: str = ''
+    consecutive_recovery_turns: int = 0
+    interrupted_turn: bool = False
 
 
 class VoiceSessionManager:
@@ -112,6 +119,42 @@ class VoiceSessionManager:
         if session.telemetry is None:
             return {'correlation_id': '', 'tenant_id': session.tenant_id}
         return session.telemetry.payload()
+
+    def _retry_reason_from_transcript(self, *, session: VoiceSession, transcript_text: str | None) -> str:
+        normalized = (transcript_text or '').strip().lower()
+        if session.interrupted_turn:
+            return 'caller_interruption'
+        if session.last_asr_partial and not normalized:
+            return 'partial_unclear_speech'
+        if any(hint in normalized for hint in CARRIER_PROMPT_HINTS):
+            return 'line_artifact'
+        if not normalized:
+            return 'no_speech'
+        return 'unusable_input'
+
+    def _log_recovery_prompt(
+        self,
+        *,
+        session: VoiceSession,
+        retry_reason: str,
+        retry_count: int,
+        active_field: str | None,
+        chosen_recovery_prompt: str,
+        progress_made: bool,
+    ) -> None:
+        if session.telemetry is None:
+            return
+        session.telemetry.log(
+            'call.recovery.selected',
+            retry_reason=retry_reason,
+            retry_count=retry_count,
+            active_field=active_field or '',
+            last_asr_partial=session.last_asr_partial,
+            last_asr_final=session.last_asr_final,
+            chosen_recovery_prompt=chosen_recovery_prompt,
+            progress_made=progress_made,
+            consecutive_recovery_turns=session.consecutive_recovery_turns,
+        )
 
     def _handle_passthrough_telephony_event(
         self,
@@ -168,8 +211,10 @@ class VoiceSessionManager:
         event_type = event.get('type')
         text = (event.get('text') or '').strip()
         if event_type == 'partial_transcript' and text:
+            session.last_asr_partial = text
             session.telemetry.mark('asr_first_partial', transcript_text=text)
         elif event_type == 'final_transcript' and text:
+            session.last_asr_final = text
             session.telemetry.mark('asr_first_final', transcript_text=text)
             if session.caller_turns == 0:
                 self._analyze_initial_transcript(session=session, transcript_text=text)
@@ -189,6 +234,7 @@ class VoiceSessionManager:
             with contextlib.suppress(asyncio.CancelledError):
                 await session.tts_task
             session.speaking = False
+            session.interrupted_turn = True
             self._record_error(session, 'barge_in')
             if session.stream_sid:
                 await self._send_twilio_event(
@@ -326,6 +372,8 @@ class VoiceSessionManager:
     async def _start_asr_turn(self, *, session: VoiceSession, websocket: WebSocket) -> None:
         if session.speaking:
             await self.stop_tts_for_barge_in(websocket, session)
+        session.last_asr_partial = ''
+        session.last_asr_final = ''
         session.asr_turns_started += 1
         session.asr_stream = await asr_client.start_stream(
             call_id=session.call_id,
@@ -464,21 +512,63 @@ class VoiceSessionManager:
         agent: Agent,
         call: Call,
         current_field: str | None,
+        retry_reason: str,
+        progress_made: bool = False,
     ) -> None:
+        session.consecutive_recovery_turns += 1
+        session.last_retry_reason = retry_reason
+
         if not current_field:
-            await self._persist_agent_turn(session=session, db=db, agent=agent, call=call, text=RECOVERY_PROMPT)
-            await self.send_tts(websocket, session, agent, RECOVERY_PROMPT)
+            retry_count = session.consecutive_recovery_turns
+            prompt = agent_runtime.build_general_recovery_prompt(
+                retry_reason=retry_reason,
+                retry_count=retry_count,
+                previous_prompt=session.last_recovery_prompt,
+            )
+            if session.consecutive_recovery_turns >= MAX_CONSECUTIVE_RECOVERY_TURNS:
+                prompt = agent_runtime.build_connection_check_prompt(previous_prompt=session.last_recovery_prompt)
+            session.last_recovery_prompt = prompt
+            self._log_recovery_prompt(
+                session=session,
+                retry_reason=retry_reason,
+                retry_count=retry_count,
+                active_field=current_field,
+                chosen_recovery_prompt=prompt,
+                progress_made=progress_made,
+            )
+            await self._persist_agent_turn(session=session, db=db, agent=agent, call=call, text=prompt)
+            await self.send_tts(websocket, session, agent, prompt)
             return
 
         retry_count = session.field_retry_counts.get(current_field, 0) + 1
         session.field_retry_counts[current_field] = retry_count
         self._record_error(session, f'{current_field}_retry_{retry_count}')
 
-        if retry_count <= MAX_FIELD_RETRIES:
-            prompt = agent_runtime.build_retry_prompt(
+        if session.consecutive_recovery_turns >= MAX_CONSECUTIVE_RECOVERY_TURNS:
+            next_field = self._next_missing_field(agent=agent, session=session, skip_field=current_field)
+            if next_field:
+                prompt = agent_runtime.build_skip_ahead_prompt(
+                    agent=agent,
+                    field_name=current_field,
+                    next_field=next_field,
+                )
+                session.prompted_field = next_field
+            else:
+                prompt = agent_runtime.build_connection_check_prompt(previous_prompt=session.last_recovery_prompt)
+                session.prompted_field = None
+            if session.telemetry is not None:
+                session.telemetry.add_fallback(
+                    'recovery_ceiling_reached',
+                    active_field=current_field,
+                    retry_reason=retry_reason,
+                )
+        elif retry_count <= MAX_FIELD_RETRIES:
+            prompt = agent_runtime.build_field_retry_prompt(
                 agent=agent,
                 field_name=current_field,
                 retry_count=retry_count,
+                retry_reason=retry_reason,
+                previous_prompt=session.last_recovery_prompt,
             )
             session.prompted_field = current_field
         else:
@@ -491,6 +581,15 @@ class VoiceSessionManager:
             )
             session.prompted_field = next_field
 
+        session.last_recovery_prompt = prompt
+        self._log_recovery_prompt(
+            session=session,
+            retry_reason=retry_reason,
+            retry_count=retry_count,
+            active_field=current_field,
+            chosen_recovery_prompt=prompt,
+            progress_made=progress_made,
+        )
         await self._persist_agent_turn(session=session, db=db, agent=agent, call=call, text=prompt)
         await self.send_tts(websocket, session, agent, prompt)
 
@@ -599,8 +698,23 @@ class VoiceSessionManager:
         call: Call,
         turn: AgentTurn,
     ) -> None:
+        progress_made = bool(turn.captured_fields)
         for field_name in turn.captured_fields.keys():
             session.field_retry_counts[field_name] = 0
+        if progress_made:
+            session.consecutive_recovery_turns = 0
+            session.last_recovery_prompt = ''
+            session.last_retry_reason = ''
+        if session.telemetry is not None:
+            session.telemetry.log(
+                'call.dialog.turn_evaluated',
+                active_field=session.prompted_field or '',
+                progress_made=progress_made,
+                captured_fields=sorted(turn.captured_fields.keys()),
+                missing_fields=turn.missing_fields,
+                last_asr_partial=session.last_asr_partial,
+                last_asr_final=session.last_asr_final,
+            )
 
         if turn.should_escalate:
             call.status = CallStatus.escalated
@@ -620,6 +734,11 @@ class VoiceSessionManager:
                     agent=agent,
                     call=call,
                     current_field=current_field,
+                    retry_reason=self._retry_reason_from_transcript(
+                        session=session,
+                        transcript_text=session.last_asr_final,
+                    ),
+                    progress_made=False,
                 )
                 return
 
@@ -684,9 +803,13 @@ class VoiceSessionManager:
                 agent=agent,
                 call=call,
                 current_field=session.prompted_field,
+                retry_reason=self._retry_reason_from_transcript(session=session, transcript_text=''),
+                progress_made=False,
             )
+            session.interrupted_turn = False
             return
 
+        session.last_asr_final = transcript.text
         if session.telemetry is not None and 'asr_first_final' not in session.telemetry.timestamps:
             session.telemetry.mark('asr_first_final', transcript_text=transcript.text)
         if session.caller_turns == 0:
@@ -701,6 +824,7 @@ class VoiceSessionManager:
                 transcript_started_ms=transcript.started_ms,
                 transcript_ended_ms=transcript.ended_ms,
             )
+        session.interrupted_turn = False
         await self._persist_caller_turn(session=session, db=db, call=call, transcript=transcript)
 
         t1 = time.perf_counter()

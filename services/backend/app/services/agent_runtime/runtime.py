@@ -36,6 +36,42 @@ PHONE_WORDS = {
     'ate': '8',
     'nine': '9',
 }
+RECOVERY_PREFIXES = {
+    'no_speech': [
+        "I didn't hear anything there.",
+        'The line was quiet for a moment.',
+        "I'm not getting any audio just yet.",
+    ],
+    'partial_unclear_speech': [
+        "I caught part of that, but not enough to be sure.",
+        'That came through a little unclear.',
+        "I only got part of that on my end.",
+    ],
+    'unusable_input': [
+        "I didn't catch that clearly.",
+        "I want to make sure I heard you right.",
+        'That sounded a little unclear to me.',
+    ],
+    'caller_interruption': [
+        "No problem, let's pick that back up.",
+        "You're fine, let's try that once more.",
+        "Let's start from there again.",
+    ],
+    'line_artifact': [
+        'The line broke up for a second.',
+        'That sounded a little distorted on my end.',
+        'The audio cut out there for a moment.',
+    ],
+    'generic': [
+        "Let's try that one more time.",
+        'Could you say that again for me?',
+        "Let's go over that once more.",
+    ],
+}
+CONNECTION_CHECK_PROMPTS = [
+    "I'm having trouble hearing you clearly on this line.",
+    'The audio is still breaking up on my end.',
+]
 
 
 @dataclass
@@ -103,10 +139,45 @@ class AgentRuntime:
         )
 
     def build_retry_prompt(self, *, agent: Agent, field_name: str, retry_count: int) -> str:
+        return self.build_field_retry_prompt(
+            agent=agent,
+            field_name=field_name,
+            retry_count=retry_count,
+            retry_reason='unusable_input',
+            previous_prompt='',
+        )
+
+    def build_field_retry_prompt(
+        self,
+        *,
+        agent: Agent,
+        field_name: str,
+        retry_count: int,
+        retry_reason: str,
+        previous_prompt: str,
+    ) -> str:
         prompt = self._field_prompt(agent=agent, field_name=field_name)
-        if retry_count <= 1:
-            return f'Sorry, I missed that. {prompt}'
-        return f'I want to make sure I get that right. {prompt}'
+        prefix = self._choose_recovery_prefix(
+            retry_reason=retry_reason,
+            retry_count=retry_count,
+            previous_prompt=previous_prompt,
+            include_prompt=prompt,
+        )
+        return f'{prefix} {prompt}'.strip()
+
+    def build_general_recovery_prompt(
+        self,
+        *,
+        retry_reason: str,
+        retry_count: int,
+        previous_prompt: str,
+    ) -> str:
+        return self._choose_recovery_prefix(
+            retry_reason=retry_reason,
+            retry_count=retry_count,
+            previous_prompt=previous_prompt,
+            include_prompt='',
+        )
 
     def build_skip_ahead_prompt(self, *, agent: Agent, field_name: str, next_field: str | None) -> str:
         if next_field:
@@ -115,6 +186,12 @@ class AgentRuntime:
                 f'{self._field_prompt(agent=agent, field_name=next_field)}'
             )
         return f'No problem. Please tell me a little about how I can help today.'
+
+    def build_connection_check_prompt(self, *, previous_prompt: str) -> str:
+        for prompt in CONNECTION_CHECK_PROMPTS:
+            if prompt != previous_prompt:
+                return prompt
+        return CONNECTION_CHECK_PROMPTS[0]
 
     async def generate_response(
         self,
@@ -188,6 +265,19 @@ class AgentRuntime:
                         from_number=telemetry_context.get('from_number', ''),
                         to_number=telemetry_context.get('to_number', ''),
                         llm_request_index=telemetry_context.get('llm_request_index'),
+                        resolved_model=llm_model,
+                        non_thinking_enabled=bool(
+                            ((llm_request_overrides.get('extra_body') or {}).get('chat_template_kwargs') or {}).get(
+                                'enable_thinking'
+                            )
+                            is False
+                        ),
+                        llm_request_shape={
+                            'message_count': 2,
+                            'temperature': 0.2,
+                            'has_extra_body': bool(llm_request_overrides.get('extra_body')),
+                            'extra_body_keys': sorted((llm_request_overrides.get('extra_body') or {}).keys()),
+                        },
                         llm_request_overrides=llm_request_overrides,
                     )
                     logger.info('call.llm.request.start', extra=event)
@@ -374,6 +464,23 @@ class AgentRuntime:
         if len(cleaned) < 3 or cleaned.lower() in GENERIC_NOISE:
             return None
         return cleaned
+
+    def _choose_recovery_prefix(
+        self,
+        *,
+        retry_reason: str,
+        retry_count: int,
+        previous_prompt: str,
+        include_prompt: str,
+    ) -> str:
+        options = RECOVERY_PREFIXES.get(retry_reason, RECOVERY_PREFIXES['generic'])
+        preferred_index = max(0, min(retry_count - 1, len(options) - 1))
+        ordered_candidates = options[preferred_index:] + options[:preferred_index]
+        for candidate in ordered_candidates:
+            combined = f'{candidate} {include_prompt}'.strip()
+            if combined != previous_prompt:
+                return candidate
+        return ordered_candidates[0]
 
 
 agent_runtime = AgentRuntime()

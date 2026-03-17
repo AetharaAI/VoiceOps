@@ -71,6 +71,29 @@ def test_runtime_can_explicitly_enable_thinking() -> None:
     assert overrides == {'extra_body': {'chat_template_kwargs': {'enable_thinking': True}}}
 
 
+def test_recovery_prompts_vary_and_avoid_immediate_repeat() -> None:
+    agent = _make_agent({'name': {'prompt': 'Can I have your full name?'}})
+
+    first = agent_runtime.build_field_retry_prompt(
+        agent=agent,
+        field_name='name',
+        retry_count=1,
+        retry_reason='no_speech',
+        previous_prompt='',
+    )
+    second = agent_runtime.build_field_retry_prompt(
+        agent=agent,
+        field_name='name',
+        retry_count=2,
+        retry_reason='no_speech',
+        previous_prompt=first,
+    )
+
+    assert first != second
+    assert 'full name' in first.lower()
+    assert 'full name' in second.lower()
+
+
 @pytest.mark.asyncio
 async def test_generate_response_sends_enable_thinking_in_extra_body(monkeypatch) -> None:
     agent = _make_agent()
