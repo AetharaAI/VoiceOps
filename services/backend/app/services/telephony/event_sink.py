@@ -16,7 +16,16 @@ from app.services.telephony.inbound_routing import normalize_phone_number
 
 logger = get_logger(__name__)
 
-REPO_ROOT = Path(__file__).resolve().parents[5]
+
+def _resolve_runtime_root() -> Path:
+    current = Path(__file__).resolve()
+    for candidate in current.parents:
+        if (candidate / 'requirements.txt').exists() and (candidate / 'app').is_dir():
+            return candidate
+    return Path.cwd()
+
+
+REPO_ROOT = _resolve_runtime_root()
 TOP_LEVEL_EVENT_FIELDS = {
     'timestamp',
     'event_type',
