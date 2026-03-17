@@ -19,6 +19,7 @@ from app.models.models import Agent, Call, CallStatus, TranscriptSegment
 from app.services.agent_runtime.runtime import AgentTurn, agent_runtime
 from app.services.asr.client import ASRFinalTranscript, ASRStream, asr_client
 from app.services.realtime.audio import mulaw_to_pcm16, pcm16_to_mulaw, resample_pcm16, wav_to_pcm16
+from app.services.telephony.event_sink import call_event_sink
 from app.services.telephony.telemetry import CallTelemetry
 from app.services.tts.client import tts_client
 
@@ -186,17 +187,22 @@ class VoiceSessionManager:
             t0 = time.perf_counter()
             session.tts_requests += 1
             tts_request_index = session.tts_requests
+            tts_voice = agent_runtime.tts_voice_for_agent(agent=agent)
             first_chunk_logged = False
             if session.telemetry is not None:
                 session.telemetry.log(
                     'call.tts.request.start',
                     tts_request_index=tts_request_index,
-                    agent_voice=getattr(tts_client.settings, 'aether_voice_tts_voice', ''),
+                    tts_provider='aether_voice',
+                    tts_voice=tts_voice,
+                    agent_voice=tts_voice,
                     text_preview=text[:160],
                 )
                 session.telemetry.mark(
                     'tts_request_started',
-                    agent_voice=getattr(tts_client.settings, 'aether_voice_tts_voice', ''),
+                    tts_provider='aether_voice',
+                    tts_voice=tts_voice,
+                    agent_voice=tts_voice,
                     text_preview=text[:160],
                 )
             try:
@@ -204,6 +210,7 @@ class VoiceSessionManager:
                     text=text,
                     call_id=session.call_id,
                     agent_id=str(agent.id),
+                    voice=tts_voice,
                 ):
                     mulaw_audio = self._wav_chunk_to_mulaw(wav_chunk)
                     for index in range(0, len(mulaw_audio), TTS_MEDIA_CHUNK_BYTES):
@@ -212,6 +219,8 @@ class VoiceSessionManager:
                             session.telemetry.log(
                                 'call.tts.audio.first_chunk',
                                 tts_request_index=tts_request_index,
+                                tts_provider='aether_voice',
+                                tts_voice=tts_voice,
                                 chunk_bytes=len(mulaw_audio),
                             )
                         if session.telemetry is not None and 'tts_first_audio_chunk' not in session.telemetry.timestamps:
@@ -233,6 +242,8 @@ class VoiceSessionManager:
                 if session.telemetry is not None:
                     session.telemetry.warning(
                         'call.tts.request.failed',
+                        tts_provider='aether_voice',
+                        tts_voice=tts_voice,
                         error_type=type(exc).__name__,
                         error=str(exc),
                     )
@@ -251,10 +262,14 @@ class VoiceSessionManager:
                     session.telemetry.log(
                         'call.tts.request.end',
                         tts_request_index=tts_request_index,
+                        tts_provider='aether_voice',
+                        tts_voice=tts_voice,
                         latency_ms=round(max(0.0, (time.perf_counter() - t0) * 1000), 2),
                     )
                     session.telemetry.mark(
                         'tts_request_completed',
+                        tts_provider='aether_voice',
+                        tts_voice=tts_voice,
                         latency_ms=round(max(0.0, (time.perf_counter() - t0) * 1000), 2),
                     )
                 TTS_LATENCY.observe(time.perf_counter() - t0)
@@ -274,8 +289,12 @@ class VoiceSessionManager:
         session.caller_turn_active = True
         session.consecutive_silence_frames = 0
         if session.telemetry is not None:
-            session.telemetry.log('call.asr.stream.started', asr_turn_index=session.asr_turns_started)
-            session.telemetry.mark('asr_started')
+            session.telemetry.log(
+                'call.asr.stream.started',
+                asr_turn_index=session.asr_turns_started,
+                asr_provider='aether_voice',
+            )
+            session.telemetry.mark('asr_started', asr_provider='aether_voice')
 
     async def _send_frame_to_asr(self, session: VoiceSession, pcm_frame_8k: bytes) -> None:
         if session.asr_stream is None:
@@ -309,12 +328,36 @@ class VoiceSessionManager:
         )
         session.caller_turns += 1
         await db.flush()
+        if session.telemetry is not None:
+            call_event_sink.record_event(
+                call_event_sink.build_event(
+                    event_type='transcript.caller.final',
+                    level='info',
+                    call_id=str(call.id),
+                    call_sid=call.external_call_id or '',
+                    tenant_id=session.tenant_id,
+                    direction=session.telemetry.route,
+                    route=session.telemetry.route,
+                    agent_id=session.telemetry.resolved_agent_id,
+                    agent_name=session.telemetry.resolved_agent_name,
+                    correlation_id=session.telemetry.correlation_id,
+                    from_number=call.from_number,
+                    to_number=call.to_number,
+                    asr_provider='aether_voice',
+                    speaker='caller',
+                    text=transcript.text,
+                    is_final=True,
+                    started_ms=transcript.started_ms,
+                    ended_ms=transcript.ended_ms,
+                )
+            )
 
     async def _persist_agent_turn(
         self,
         *,
         session: VoiceSession,
         db: AsyncSession,
+        agent: Agent,
         call: Call,
         text: str,
     ) -> None:
@@ -329,6 +372,28 @@ class VoiceSessionManager:
         )
         session.agent_turns += 1
         await db.flush()
+        if session.telemetry is not None:
+            call_event_sink.record_event(
+                call_event_sink.build_event(
+                    event_type='transcript.agent.final',
+                    level='info',
+                    call_id=str(call.id),
+                    call_sid=call.external_call_id or '',
+                    tenant_id=session.tenant_id,
+                    direction=session.telemetry.route,
+                    route=session.telemetry.route,
+                    agent_id=session.telemetry.resolved_agent_id,
+                    agent_name=session.telemetry.resolved_agent_name,
+                    correlation_id=session.telemetry.correlation_id,
+                    from_number=call.from_number,
+                    to_number=call.to_number,
+                    tts_provider='aether_voice',
+                    tts_voice=agent_runtime.tts_voice_for_agent(agent=agent),
+                    speaker='agent',
+                    text=text,
+                    is_final=True,
+                )
+            )
 
     def _next_missing_field(
         self,
@@ -354,7 +419,7 @@ class VoiceSessionManager:
         current_field: str | None,
     ) -> None:
         if not current_field:
-            await self._persist_agent_turn(session=session, db=db, call=call, text=RECOVERY_PROMPT)
+            await self._persist_agent_turn(session=session, db=db, agent=agent, call=call, text=RECOVERY_PROMPT)
             await self.send_tts(websocket, session, agent, RECOVERY_PROMPT)
             return
 
@@ -379,7 +444,7 @@ class VoiceSessionManager:
             )
             session.prompted_field = next_field
 
-        await self._persist_agent_turn(session=session, db=db, call=call, text=prompt)
+        await self._persist_agent_turn(session=session, db=db, agent=agent, call=call, text=prompt)
         await self.send_tts(websocket, session, agent, prompt)
 
     def _determine_disposition(self, *, call: Call, agent: Agent, session: VoiceSession) -> str:
@@ -432,13 +497,49 @@ class VoiceSessionManager:
         logger.info(
             'call.summary',
             extra={
-                'correlation_id': '',
+                'correlation_id': session.telemetry.correlation_id if session.telemetry is not None else '',
                 'tenant_id': session.tenant_id,
                 'call_id': str(call.id),
                 'call_sid': call.external_call_id or '',
                 'call_summary': summary,
             },
         )
+        if session.telemetry is not None:
+            call_event_sink.record_event(
+                call_event_sink.build_event(
+                    event_type='call.summary.final',
+                    level='info',
+                    call_id=str(call.id),
+                    call_sid=call.external_call_id or '',
+                    tenant_id=session.tenant_id,
+                    direction=session.telemetry.route,
+                    route=session.telemetry.route,
+                    agent_id=session.telemetry.resolved_agent_id,
+                    agent_name=session.telemetry.resolved_agent_name,
+                    correlation_id=session.telemetry.correlation_id,
+                    from_number=call.from_number,
+                    to_number=call.to_number,
+                    latency_ms=(
+                        round(summary.get('duration_seconds', 0) * 1000, 2)
+                        if summary.get('duration_seconds') is not None
+                        else None
+                    ),
+                    summary=summary,
+                    total_call_duration_seconds=summary.get('duration_seconds'),
+                    first_greeting_latency_ms=summary.get('telemetry', {})
+                    .get('latency_ms', {})
+                    .get('time_to_first_greeting_audio'),
+                    asr_latency_summary=summary.get('telemetry', {}).get('latency_summary', {}).get('asr', {}),
+                    llm_latency_summary=summary.get('telemetry', {}).get('latency_summary', {}).get('llm', {}),
+                    tts_latency_summary=summary.get('telemetry', {}).get('latency_summary', {}).get('tts', {}),
+                    extracted_fields=summary.get('fields_captured', {}),
+                    retries=summary.get('retry_counts', {}),
+                    errors=summary.get('notable_errors', []),
+                    fallbacks=summary.get('telemetry', {}).get('fallbacks', []),
+                    anomalies=summary.get('telemetry', {}).get('anomalies', []),
+                    handoff_attempts=summary.get('telemetry', {}).get('handoff_attempts', 0),
+                )
+            )
         await db.commit()
 
     async def _handle_agent_turn(
@@ -479,7 +580,7 @@ class VoiceSessionManager:
         if turn.outcome:
             call.outcome = turn.outcome
 
-        await self._persist_agent_turn(session=session, db=db, call=call, text=turn.response_text)
+        await self._persist_agent_turn(session=session, db=db, agent=agent, call=call, text=turn.response_text)
         await self.send_tts(websocket, session, agent, turn.response_text)
 
     async def finalize_caller_turn(
@@ -516,6 +617,7 @@ class VoiceSessionManager:
             if session.telemetry is not None:
                 session.telemetry.warning(
                     'call.asr.finalization.failed',
+                    asr_provider='aether_voice',
                     error_type=type(exc).__name__,
                     error=str(exc),
                 )
@@ -546,6 +648,8 @@ class VoiceSessionManager:
             session.telemetry.log(
                 'call.asr.final.received',
                 asr_turn_index=session.asr_turns_started,
+                asr_provider='aether_voice',
+                latency_ms=round(max(0.0, (time.perf_counter() - t0) * 1000), 2),
                 transcript_text=transcript.text,
                 transcript_started_ms=transcript.started_ms,
                 transcript_ended_ms=transcript.ended_ms,
@@ -686,6 +790,7 @@ class VoiceSessionManager:
             call_sid=call.external_call_id or '',
             from_number=call.from_number,
             to_number=call.to_number,
+            correlation_id=(telephony_context.get('webhook') or {}).get('correlation_id', ''),
         )
         session.telemetry.bind_agent(agent_id=str(agent.id), agent_name=agent.name)
         session.telemetry.mark('call_connected')
@@ -746,6 +851,7 @@ class VoiceSessionManager:
                         await self._persist_agent_turn(
                             session=session,
                             db=db,
+                            agent=agent,
                             call=call,
                             text=opening_turn.response_text,
                         )
@@ -767,6 +873,25 @@ class VoiceSessionManager:
                     digit = event.get('dtmf', {}).get('digit')
                     if session.telemetry is not None:
                         session.telemetry.add_anomaly('dtmf_received', digit=digit or '')
+                        call_event_sink.record_event(
+                            call_event_sink.build_event(
+                                event_type='transcript.dtmf.final',
+                                level='info',
+                                call_id=str(call.id),
+                                call_sid=call.external_call_id or '',
+                                tenant_id=session.tenant_id,
+                                direction=session.telemetry.route,
+                                route=session.telemetry.route,
+                                agent_id=session.telemetry.resolved_agent_id,
+                                agent_name=session.telemetry.resolved_agent_name,
+                                correlation_id=session.telemetry.correlation_id,
+                                from_number=call.from_number,
+                                to_number=call.to_number,
+                                speaker='dtmf',
+                                text=f'DTMF:{digit}',
+                                is_final=True,
+                            )
+                        )
                     db.add(
                         TranscriptSegment(
                             tenant_id=session.tenant_id,
@@ -815,6 +940,7 @@ class VoiceSessionManager:
             if session.asr_stream is not None:
                 with contextlib.suppress(Exception):
                     await session.asr_stream.close()
+            call_event_sink.close_call(str(call.id), call.external_call_id or '')
             self.sessions.pop(call_id, None)
             with contextlib.suppress(Exception):
                 await websocket.close()

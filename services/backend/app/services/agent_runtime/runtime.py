@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.models import Agent
 from app.services.realtime.audio import strip_control_markup
+from app.services.telephony.event_sink import call_event_sink
 
 logger = get_logger(__name__)
 
@@ -53,6 +54,33 @@ class AgentRuntime:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.http = httpx.AsyncClient(timeout=25)
+
+    def runtime_config(self, *, agent: Agent) -> dict:
+        return ((agent.policy_config or {}).get('runtime') or {})
+
+    def llm_provider_for_agent(self, *, agent: Agent) -> str:
+        return self.runtime_config(agent=agent).get('llm_provider', self.settings.llm_provider)
+
+    def llm_model_for_agent(self, *, agent: Agent) -> str:
+        return self.runtime_config(agent=agent).get('llm_model', self.settings.llm_model)
+
+    def tts_voice_for_agent(self, *, agent: Agent) -> str:
+        return self.runtime_config(agent=agent).get('tts_voice', self.settings.aether_voice_tts_voice)
+
+    def llm_request_overrides_for_agent(self, *, agent: Agent) -> dict:
+        runtime = self.runtime_config(agent=agent)
+        model = self.llm_model_for_agent(agent=agent)
+        enable_thinking = runtime.get('enable_thinking')
+        if enable_thinking is None and (model.startswith('qwen') or model == 'omnicoder'):
+            enable_thinking = False
+
+        if enable_thinking is None:
+            return {}
+        return {
+            'chat_template_kwargs': {
+                'enable_thinking': bool(enable_thinking),
+            }
+        }
 
     def missing_required_fields(self, *, agent: Agent, collected_fields: dict) -> list[str]:
         required_fields = agent.required_fields or {}
@@ -132,23 +160,38 @@ class AgentRuntime:
                 outcome='success',
             )
 
-        if self.settings.llm_provider in {'api', 'openai'} and self.settings.llm_endpoint:
+        llm_provider = self.llm_provider_for_agent(agent=agent)
+        llm_model = self.llm_model_for_agent(agent=agent)
+        llm_request_overrides = self.llm_request_overrides_for_agent(agent=agent)
+        if llm_provider in {'api', 'openai'} and self.settings.llm_endpoint:
             try:
                 headers = {}
                 if self.settings.llm_api_key:
                     headers['Authorization'] = f'Bearer {self.settings.llm_api_key}'
                 if telemetry_context:
-                    logger.info(
-                        'call.llm.request.start',
-                        extra={
-                            **telemetry_context,
-                            'llm_provider': self.settings.llm_provider,
-                            'llm_model': self.settings.llm_model,
-                        },
+                    event = call_event_sink.build_event(
+                        event_type='call.llm.request.start',
+                        level='info',
+                        llm_provider=llm_provider,
+                        llm_model=llm_model,
+                        call_id=telemetry_context.get('call_id', ''),
+                        call_sid=telemetry_context.get('call_sid', ''),
+                        tenant_id=telemetry_context.get('tenant_id', ''),
+                        direction=telemetry_context.get('direction', telemetry_context.get('route', '')),
+                        route=telemetry_context.get('route', ''),
+                        agent_id=telemetry_context.get('resolved_agent_id', ''),
+                        agent_name=telemetry_context.get('resolved_agent_name', ''),
+                        correlation_id=telemetry_context.get('correlation_id', ''),
+                        from_number=telemetry_context.get('from_number', ''),
+                        to_number=telemetry_context.get('to_number', ''),
+                        llm_request_index=telemetry_context.get('llm_request_index'),
+                        llm_request_overrides=llm_request_overrides,
                     )
-                if self.settings.llm_provider == 'openai':
+                    logger.info('call.llm.request.start', extra=event)
+                    call_event_sink.record_event(event)
+                if llm_provider == 'openai':
                     payload = {
-                        'model': self.settings.llm_model,
+                        'model': llm_model,
                         'messages': [
                             {
                                 'role': 'system',
@@ -164,6 +207,7 @@ class AgentRuntime:
                         ],
                         'temperature': 0.2,
                     }
+                    payload.update(llm_request_overrides)
                     response = await self.http.post(self.settings.llm_endpoint, json=payload, headers=headers)
                     response.raise_for_status()
                     body = response.json()
@@ -182,15 +226,27 @@ class AgentRuntime:
                     response.raise_for_status()
                     model_text = response.json().get('text', 'How can I help further?')
                 if telemetry_context:
-                    logger.info(
-                        'call.llm.request.end',
-                        extra={
-                            **telemetry_context,
-                            'llm_provider': self.settings.llm_provider,
-                            'llm_model': self.settings.llm_model,
-                            'llm_output_chars': len(model_text),
-                        },
+                    event = call_event_sink.build_event(
+                        event_type='call.llm.request.end',
+                        level='info',
+                        llm_provider=llm_provider,
+                        llm_model=llm_model,
+                        call_id=telemetry_context.get('call_id', ''),
+                        call_sid=telemetry_context.get('call_sid', ''),
+                        tenant_id=telemetry_context.get('tenant_id', ''),
+                        direction=telemetry_context.get('direction', telemetry_context.get('route', '')),
+                        route=telemetry_context.get('route', ''),
+                        agent_id=telemetry_context.get('resolved_agent_id', ''),
+                        agent_name=telemetry_context.get('resolved_agent_name', ''),
+                        correlation_id=telemetry_context.get('correlation_id', ''),
+                        from_number=telemetry_context.get('from_number', ''),
+                        to_number=telemetry_context.get('to_number', ''),
+                        llm_output_chars=len(model_text),
+                        llm_request_index=telemetry_context.get('llm_request_index'),
+                        llm_request_overrides=llm_request_overrides,
                     )
+                    logger.info('call.llm.request.end', extra=event)
+                    call_event_sink.record_event(event)
                 return AgentTurn(
                     response_text=strip_control_markup(model_text),
                     captured_fields=captured_fields,
@@ -198,16 +254,28 @@ class AgentRuntime:
                 )
             except Exception as exc:
                 if telemetry_context:
-                    logger.warning(
-                        'call.llm.request.failed',
-                        extra={
-                            **telemetry_context,
-                            'llm_provider': self.settings.llm_provider,
-                            'llm_model': self.settings.llm_model,
-                            'error_type': type(exc).__name__,
-                            'error': str(exc),
-                        },
+                    event = call_event_sink.build_event(
+                        event_type='call.llm.request.failed',
+                        level='warning',
+                        llm_provider=llm_provider,
+                        llm_model=llm_model,
+                        call_id=telemetry_context.get('call_id', ''),
+                        call_sid=telemetry_context.get('call_sid', ''),
+                        tenant_id=telemetry_context.get('tenant_id', ''),
+                        direction=telemetry_context.get('direction', telemetry_context.get('route', '')),
+                        route=telemetry_context.get('route', ''),
+                        agent_id=telemetry_context.get('resolved_agent_id', ''),
+                        agent_name=telemetry_context.get('resolved_agent_name', ''),
+                        correlation_id=telemetry_context.get('correlation_id', ''),
+                        from_number=telemetry_context.get('from_number', ''),
+                        to_number=telemetry_context.get('to_number', ''),
+                        llm_request_index=telemetry_context.get('llm_request_index'),
+                        llm_request_overrides=llm_request_overrides,
+                        error_type=type(exc).__name__,
+                        error=str(exc),
                     )
+                    logger.warning('call.llm.request.failed', extra=event)
+                    call_event_sink.record_event(event)
 
         return AgentTurn(
             response_text='Thank you. I have the details I need for now. What else can I help you with today?',

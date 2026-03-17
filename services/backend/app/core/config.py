@@ -35,16 +35,20 @@ class Settings(BaseSettings):
     aether_voice_asr_model: str = 'auto'
     aether_voice_asr_language: str = 'auto'
     aether_voice_tts_model: str = 'kokoro_realtime'
-    aether_voice_tts_voice: str = 'af_sky'
+    aether_voice_tts_voice: str = 'af_bella'
     aether_voice_tts_format: str = 'wav'
     aether_voice_tts_sample_rate: int = 24000
 
     llm_provider: str = 'openai'
     llm_endpoint: str | None = None
     llm_api_key: str | None = None
-    llm_model: str = 'qwen3.5-35b'
+    llm_model: str = 'omnicoder'
 
     enable_tracing: bool = False
+    call_log_root: str = 'logs/calls'
+    redis_streams_enabled: bool = True
+    redis_call_event_stream: str = 'voiceops:call_events'
+    redis_call_transcript_stream: str = 'voiceops:call_transcripts'
 
     @property
     def database_url(self) -> str:

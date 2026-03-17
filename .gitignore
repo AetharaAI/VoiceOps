@@ -12,3 +12,4 @@ coverage/
 twillo-recovery-code/
 *.pem
 *.key
+logs/calls/

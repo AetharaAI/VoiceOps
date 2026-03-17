@@ -53,6 +53,24 @@ def test_build_opening_prompt_uses_first_required_field() -> None:
     assert 'Can I get your full name?' in turn.response_text
 
 
+def test_omnicoder_defaults_to_thinking_disabled() -> None:
+    agent = _make_agent()
+    agent.policy_config = {'runtime': {'llm_model': 'omnicoder'}}
+
+    overrides = agent_runtime.llm_request_overrides_for_agent(agent=agent)
+
+    assert overrides == {'chat_template_kwargs': {'enable_thinking': False}}
+
+
+def test_runtime_can_explicitly_enable_thinking() -> None:
+    agent = _make_agent()
+    agent.policy_config = {'runtime': {'llm_model': 'omnicoder', 'enable_thinking': True}}
+
+    overrides = agent_runtime.llm_request_overrides_for_agent(agent=agent)
+
+    assert overrides == {'chat_template_kwargs': {'enable_thinking': True}}
+
+
 @pytest.mark.asyncio
 async def test_captures_name_then_prompts_for_phone() -> None:
     agent = _make_agent(

@@ -44,3 +44,16 @@ class TranscriptSegmentResponse(BaseModel):
 
 class CallDetailResponse(CallResponse):
     transcript: list[TranscriptSegmentResponse]
+
+
+class CallLogResponse(BaseModel):
+    path: str
+    call_id: str
+    call_sid: str
+    tenant_id: str
+    direction: str
+    agent_name: str
+    started_at: str
+    event_count: int
+    summary: dict[str, Any]
+    events: list[dict[str, Any]]

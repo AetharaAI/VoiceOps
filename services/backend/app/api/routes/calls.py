@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,8 +10,9 @@ from app.core.logging import get_logger
 from app.core.metrics import CALLS_COMPLETED, CALLS_STARTED
 from app.db.session import get_db
 from app.models.models import Agent, Call, CallDirection, CallStatus, TranscriptSegment, UserRole
-from app.schemas.call import CallDetailResponse, CallResponse, OutboundCallRequest, TranscriptSegmentResponse
+from app.schemas.call import CallDetailResponse, CallLogResponse, CallResponse, OutboundCallRequest, TranscriptSegmentResponse
 from app.services.audit.service import audit_log
+from app.services.telephony.event_sink import call_event_sink
 from app.services.telephony.telemetry import utc_now_iso
 from app.services.telephony.providers import get_telephony_provider
 
@@ -98,6 +99,22 @@ async def create_outbound_call(
             'campaign_id': call.campaign_id or '',
         },
     )
+    call_event_sink.record_event(
+        call_event_sink.build_event(
+            event_type='telephony.outbound.call_created',
+            level='info',
+            call_id=str(call.id),
+            call_sid=call.external_call_id or '',
+            tenant_id=str(call.tenant_id),
+            direction='outbound',
+            route='outbound',
+            agent_id=str(agent.id),
+            agent_name=agent.name,
+            from_number=call.from_number,
+            to_number=call.to_number,
+            campaign_id=call.campaign_id or '',
+        )
+    )
     return _to_call_response(call)
 
 
@@ -147,6 +164,26 @@ async def call_detail(
             for seg in transcript_rows
         ],
     )
+
+
+@router.get('/call-logs/latest', response_model=list[CallLogResponse])
+async def latest_call_logs(
+    limit: int = Query(default=1, ge=1, le=20),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[CallLogResponse]:
+    logs = call_event_sink.latest_logs(limit=limit, tenant_id=str(current_user.tenant_id))
+    return [CallLogResponse(**log) for log in logs]
+
+
+@router.get('/call-logs/by-call-sid/{call_sid}', response_model=CallLogResponse)
+async def call_log_by_call_sid(
+    call_sid: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> CallLogResponse:
+    log = call_event_sink.find_by_call_sid(call_sid=call_sid, tenant_id=str(current_user.tenant_id))
+    if log is None:
+        raise HTTPException(status_code=404, detail='Call log not found')
+    return CallLogResponse(**log)
 
 
 async def mark_call_completed(db: AsyncSession, call: Call, status: CallStatus) -> None:
