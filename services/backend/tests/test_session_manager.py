@@ -70,3 +70,43 @@ def test_non_passthrough_event_returns_false() -> None:
     )
 
     assert handled is False
+
+
+def test_mark_event_is_passthrough(monkeypatch) -> None:
+    recorded_events: list[dict] = []
+    monkeypatch.setattr(
+        'app.services.telephony.telemetry.call_event_sink.record_event',
+        lambda event: recorded_events.append(event),
+    )
+
+    manager = VoiceSessionManager()
+    session = VoiceSession(call_id='call-123', tenant_id='tenant-123')
+    session.telemetry = CallTelemetry(
+        call_id='call-123',
+        tenant_id='tenant-123',
+        route='inbound',
+        call_sid='CA123',
+        from_number='+18125550100',
+        to_number='+18125550101',
+        correlation_id='corr-123',
+    )
+    session.telemetry.bind_agent(agent_id='agent-123', agent_name='Monica')
+
+    handled = manager._handle_passthrough_telephony_event(
+        session=session,
+        event={
+            'event': 'mark',
+            'mark': {
+                'name': 'tts-chunk-finished',
+            },
+        },
+    )
+
+    assert handled is True
+    assert session.telemetry.anomalies == []
+    assert len(recorded_events) == 1
+    assert recorded_events[0]['event_type'] == 'call.telephony.stream.mark'
+    assert recorded_events[0]['payload'] == {
+        'media_stream_event': 'mark',
+        'mark_name': 'tts-chunk-finished',
+    }

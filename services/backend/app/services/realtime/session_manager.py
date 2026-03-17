@@ -114,18 +114,28 @@ class VoiceSessionManager:
         event: dict[str, Any],
     ) -> bool:
         event_type = event.get('event')
-        if event_type != 'connected':
-            return False
+        if event_type == 'connected':
+            connected_payload = event.get('connected') or {}
+            if session.telemetry is not None:
+                session.telemetry.log(
+                    'call.telephony.stream.connected',
+                    media_stream_event='connected',
+                    protocol=connected_payload.get('protocol', ''),
+                    version=connected_payload.get('version', ''),
+                )
+            return True
 
-        connected_payload = event.get('connected') or {}
-        if session.telemetry is not None:
-            session.telemetry.log(
-                'call.telephony.stream.connected',
-                media_stream_event='connected',
-                protocol=connected_payload.get('protocol', ''),
-                version=connected_payload.get('version', ''),
-            )
-        return True
+        if event_type == 'mark':
+            mark_payload = event.get('mark') or {}
+            if session.telemetry is not None:
+                session.telemetry.log(
+                    'call.telephony.stream.mark',
+                    media_stream_event='mark',
+                    mark_name=mark_payload.get('name', ''),
+                )
+            return True
+
+        return False
 
     def _analyze_initial_transcript(self, *, session: VoiceSession, transcript_text: str) -> None:
         normalized = transcript_text.strip().lower()
@@ -942,6 +952,7 @@ class VoiceSessionManager:
                 else:
                     if session.telemetry is not None:
                         session.telemetry.add_anomaly('unknown_telephony_event', event_type=event_type or '')
+                    continue
         except Exception:
             self._record_error(session, 'call_loop_exception')
             call.status = CallStatus.failed
