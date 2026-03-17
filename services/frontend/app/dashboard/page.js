@@ -113,7 +113,9 @@ export default function DashboardPage() {
           <ul>
             {phoneNumbers.map((row) => (
               <li key={row.id}>
-                {row.phone_number} ({row.provider}) -> {agentNameById[row.agent_id] || row.agent_id || 'Unassigned'}
+                {row.phone_number} ({row.provider})
+                {' -> '}
+                {agentNameById[row.agent_id] || row.agent_id || 'Unassigned'}
               </li>
             ))}
           </ul>
