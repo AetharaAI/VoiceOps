@@ -6,11 +6,20 @@ import wave
 
 CONTROL_TAG_PATTERN = re.compile(r'<(think|tool_call)\b[^>]*>.*?</\1>', re.IGNORECASE | re.DOTALL)
 CONTROL_TOKEN_PATTERN = re.compile(r'<\|[^>]+?\|>')
+RESERVED_TOKEN_PATTERN = re.compile(r'<reserved_\d+>', re.IGNORECASE)
+CODE_FENCE_PATTERN = re.compile(r'```[\s\S]*?(?:```|$)')
+INLINE_CODE_PATTERN = re.compile(r'`[^`]*`')
 
 
 def strip_control_markup(text: str) -> str:
-    cleaned = CONTROL_TAG_PATTERN.sub(' ', text)
+    cleaned = text or ''
+    cleaned = CONTROL_TAG_PATTERN.sub(' ', cleaned)
     cleaned = CONTROL_TOKEN_PATTERN.sub(' ', cleaned)
+    cleaned = CODE_FENCE_PATTERN.sub(' ', cleaned)
+    cleaned = INLINE_CODE_PATTERN.sub(' ', cleaned)
+    if RESERVED_TOKEN_PATTERN.search(cleaned):
+        cleaned = RESERVED_TOKEN_PATTERN.split(cleaned)[-1]
+    cleaned = RESERVED_TOKEN_PATTERN.sub(' ', cleaned)
     return ' '.join(cleaned.split())
 
 
@@ -48,4 +57,3 @@ def wav_to_pcm16(wav_audio: bytes) -> tuple[bytes, int]:
     if sample_width != 2:
         frames = audioop.lin2lin(frames, sample_width, 2)
     return frames, sample_rate
-

@@ -59,7 +59,7 @@ def test_omnicoder_defaults_to_thinking_disabled() -> None:
 
     overrides = agent_runtime.llm_request_overrides_for_agent(agent=agent)
 
-    assert overrides == {'chat_template_kwargs': {'enable_thinking': False}}
+    assert overrides == {'extra_body': {'chat_template_kwargs': {'enable_thinking': False}}}
 
 
 def test_runtime_can_explicitly_enable_thinking() -> None:
@@ -68,7 +68,56 @@ def test_runtime_can_explicitly_enable_thinking() -> None:
 
     overrides = agent_runtime.llm_request_overrides_for_agent(agent=agent)
 
-    assert overrides == {'chat_template_kwargs': {'enable_thinking': True}}
+    assert overrides == {'extra_body': {'chat_template_kwargs': {'enable_thinking': True}}}
+
+
+@pytest.mark.asyncio
+async def test_generate_response_sends_enable_thinking_in_extra_body(monkeypatch) -> None:
+    agent = _make_agent()
+    agent.policy_config = {'runtime': {'llm_provider': 'openai', 'llm_model': 'omnicoder'}}
+
+    captured_request: dict = {}
+    original_endpoint = agent_runtime.settings.llm_endpoint
+    original_api_key = agent_runtime.settings.llm_api_key
+    agent_runtime.settings.llm_endpoint = 'https://api.aetherpro.tech/v1/chat/completions'
+    agent_runtime.settings.llm_api_key = 'test-key'
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                'choices': [
+                    {
+                        'message': {
+                            'content': '<reserved_12> thinking <reserved_13> ```python\nnoop()\n```',
+                        }
+                    }
+                ]
+            }
+
+    async def fake_post(url, json, headers):  # noqa: ANN001 - httpx-compatible test shim
+        captured_request['url'] = url
+        captured_request['json'] = json
+        captured_request['headers'] = headers
+        return FakeResponse()
+
+    monkeypatch.setattr(agent_runtime.http, 'post', fake_post)
+
+    try:
+        turn = await agent_runtime.generate_response(
+            agent=agent,
+            user_text='Tell me about your services',
+            context={},
+            collected_fields={},
+        )
+    finally:
+        agent_runtime.settings.llm_endpoint = original_endpoint
+        agent_runtime.settings.llm_api_key = original_api_key
+
+    assert captured_request['json']['extra_body'] == {'chat_template_kwargs': {'enable_thinking': False}}
+    assert turn.response_text == 'Let me help with that.'
 
 
 @pytest.mark.asyncio

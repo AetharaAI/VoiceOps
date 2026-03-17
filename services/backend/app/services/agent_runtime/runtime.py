@@ -70,16 +70,19 @@ class AgentRuntime:
     def llm_request_overrides_for_agent(self, *, agent: Agent) -> dict:
         runtime = self.runtime_config(agent=agent)
         model = self.llm_model_for_agent(agent=agent)
+        model_name = model.lower()
         enable_thinking = runtime.get('enable_thinking')
-        if enable_thinking is None and (model.startswith('qwen') or model == 'omnicoder'):
+        if enable_thinking is None and (model_name.startswith('qwen') or model_name == 'omnicoder'):
             enable_thinking = False
 
         if enable_thinking is None:
             return {}
         return {
-            'chat_template_kwargs': {
-                'enable_thinking': bool(enable_thinking),
-            }
+            'extra_body': {
+                'chat_template_kwargs': {
+                    'enable_thinking': bool(enable_thinking),
+                }
+            },
         }
 
     def missing_required_fields(self, *, agent: Agent, collected_fields: dict) -> list[str]:
@@ -247,8 +250,11 @@ class AgentRuntime:
                     )
                     logger.info('call.llm.request.end', extra=event)
                     call_event_sink.record_event(event)
+                sanitized_text = strip_control_markup(model_text)
+                if not sanitized_text:
+                    sanitized_text = 'Let me help with that.'
                 return AgentTurn(
-                    response_text=strip_control_markup(model_text),
+                    response_text=sanitized_text,
                     captured_fields=captured_fields,
                     outcome='success',
                 )

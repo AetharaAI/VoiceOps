@@ -18,7 +18,13 @@ from app.core.metrics import ASR_LATENCY, LLM_LATENCY, TTS_LATENCY
 from app.models.models import Agent, Call, CallStatus, TranscriptSegment
 from app.services.agent_runtime.runtime import AgentTurn, agent_runtime
 from app.services.asr.client import ASRFinalTranscript, ASRStream, asr_client
-from app.services.realtime.audio import mulaw_to_pcm16, pcm16_to_mulaw, resample_pcm16, wav_to_pcm16
+from app.services.realtime.audio import (
+    mulaw_to_pcm16,
+    pcm16_to_mulaw,
+    resample_pcm16,
+    strip_control_markup,
+    wav_to_pcm16,
+)
 from app.services.telephony.event_sink import call_event_sink
 from app.services.telephony.telemetry import CallTelemetry
 from app.services.tts.client import tts_client
@@ -212,6 +218,16 @@ class VoiceSessionManager:
         if session.tts_task and not session.tts_task.done():
             await self.stop_tts_for_barge_in(websocket, session)
 
+        sanitized_text = strip_control_markup(text)
+        if not sanitized_text:
+            sanitized_text = RECOVERY_PROMPT
+        if session.telemetry is not None and sanitized_text != text:
+            session.telemetry.add_anomaly(
+                'tts_text_sanitized',
+                original_chars=len(text),
+                sanitized_chars=len(sanitized_text),
+            )
+
         async def _stream() -> None:
             session.speaking = True
             t0 = time.perf_counter()
@@ -226,18 +242,18 @@ class VoiceSessionManager:
                     tts_provider='aether_voice',
                     tts_voice=tts_voice,
                     agent_voice=tts_voice,
-                    text_preview=text[:160],
+                    text_preview=sanitized_text[:160],
                 )
                 session.telemetry.mark(
                     'tts_request_started',
                     tts_provider='aether_voice',
                     tts_voice=tts_voice,
                     agent_voice=tts_voice,
-                    text_preview=text[:160],
+                    text_preview=sanitized_text[:160],
                 )
             try:
                 async for wav_chunk in tts_client.stream_tts(
-                    text=text,
+                    text=sanitized_text,
                     call_id=session.call_id,
                     agent_id=str(agent.id),
                     voice=tts_voice,
@@ -391,12 +407,13 @@ class VoiceSessionManager:
         call: Call,
         text: str,
     ) -> None:
+        sanitized_text = strip_control_markup(text) or RECOVERY_PROMPT
         db.add(
             TranscriptSegment(
                 tenant_id=session.tenant_id,
                 call_id=call.id,
                 speaker='agent',
-                text=text,
+                text=sanitized_text,
                 is_final=True,
             )
         )
@@ -420,7 +437,7 @@ class VoiceSessionManager:
                     tts_provider='aether_voice',
                     tts_voice=agent_runtime.tts_voice_for_agent(agent=agent),
                     speaker='agent',
-                    text=text,
+                    text=sanitized_text,
                     is_final=True,
                 )
             )

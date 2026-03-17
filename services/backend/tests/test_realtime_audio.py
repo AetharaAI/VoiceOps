@@ -28,6 +28,15 @@ def test_strip_control_markup_removes_reasoning_tags() -> None:
     assert strip_control_markup(text) == 'Hello there world'
 
 
+def test_strip_control_markup_removes_reserved_sections_and_code_fences() -> None:
+    text = (
+        '<reserved_12> I will use the collected fields to book an appointment. '
+        '<reserved_13> <reserved_14> ```python\nbook_appointment(customer_phone_number)\n```'
+    )
+
+    assert strip_control_markup(text) == ''
+
+
 def test_wav_to_mulaw_transcode_path() -> None:
     wav_audio = _make_wav()
     pcm_audio, sample_rate = wav_to_pcm16(wav_audio)
