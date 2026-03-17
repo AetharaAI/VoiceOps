@@ -107,6 +107,26 @@ class VoiceSessionManager:
             return {'correlation_id': '', 'tenant_id': session.tenant_id}
         return session.telemetry.payload()
 
+    def _handle_passthrough_telephony_event(
+        self,
+        *,
+        session: VoiceSession,
+        event: dict[str, Any],
+    ) -> bool:
+        event_type = event.get('event')
+        if event_type != 'connected':
+            return False
+
+        connected_payload = event.get('connected') or {}
+        if session.telemetry is not None:
+            session.telemetry.log(
+                'call.telephony.stream.connected',
+                media_stream_event='connected',
+                protocol=connected_payload.get('protocol', ''),
+                version=connected_payload.get('version', ''),
+            )
+        return True
+
     def _analyze_initial_transcript(self, *, session: VoiceSession, transcript_text: str) -> None:
         normalized = transcript_text.strip().lower()
         if not normalized:
@@ -831,6 +851,8 @@ class VoiceSessionManager:
                         )
                     raise
                 event_type = event.get('event')
+                if self._handle_passthrough_telephony_event(session=session, event=event):
+                    continue
 
                 if event_type == 'start':
                     session.stream_sid = event.get('start', {}).get('streamSid')
