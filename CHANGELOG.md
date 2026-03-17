@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-03-17
+- Fixed Twilio `connected` media stream event handling in the live WebSocket dispatcher.
+- Fixed Twilio `mark` media stream event handling in the live WebSocket dispatcher.
+- Hardened the WebSocket event loop so unknown Twilio media stream events log an anomaly and `continue` instead of breaking the call loop.
+- Added `enable_thinking: false` for `omnicoder` and `qwen3.5*` telephony calls via `extra_body.chat_template_kwargs`.
+- Expanded `strip_control_markup()` so TTS sanitization removes reserved tokens, thinking tags, tool-call markup, and code fences.
+- Applied output sanitization to both the live TTS path and transcript persistence.
+- Recorded the first successful end-to-end live call on `2026-03-17`:
+  - 140 seconds total duration
+  - 6 caller turns
+  - 7 agent turns
+  - all required fields captured
+  - zero anomalies
+
 ## 2026-03-14
 - Integrated VoiceOps with the external Aether Voice realtime gateway contract for turn-based live telephony.
 - Replaced placeholder ASR/TTS plumbing with session-based realtime ASR and Kokoro realtime TTS clients.
