@@ -84,6 +84,10 @@ class AgentTurn:
     prompted_field: str | None = None
     captured_fields: dict[str, str] = field(default_factory=dict)
     missing_fields: list[str] = field(default_factory=list)
+    llm_mode: str = 'scripted'
+    response_source: str = 'scripted_backend_flow'
+    detected_intent: str = 'general'
+    fallback_reason: str | None = None
 
 
 class AgentRuntime:
@@ -145,7 +149,7 @@ class AgentRuntime:
         first_missing_field = missing_fields[0] if missing_fields else None
         if not missing_fields:
             response_text = custom_greeting or f'Hello, this is {agent.name}. How can I help today?'
-            return AgentTurn(response_text=response_text)
+            return AgentTurn(response_text=response_text, llm_mode='scripted', response_source='scripted_greeting')
 
         if custom_greeting:
             response_text = custom_greeting
@@ -155,6 +159,51 @@ class AgentRuntime:
             response_text=response_text,
             prompted_field=first_missing_field,
             missing_fields=missing_fields,
+            llm_mode='scripted',
+            response_source='scripted_greeting',
+        )
+
+    def detect_intent(self, *, user_text: str, collected_fields: dict) -> str:
+        lowered = user_text.lower()
+        if any(keyword in lowered for keyword in {'book', 'appointment', 'schedule', 'demo'}):
+            return 'booking'
+        if any(keyword in lowered for keyword in {'quote', 'estimate', 'pricing', 'price'}):
+            return 'quote'
+        if any(keyword in lowered for keyword in {'support', 'help', 'issue', 'problem', 'broken'}):
+            return 'support'
+        if any(keyword in lowered for keyword in {'sales', 'buy', 'service', 'install'}):
+            return 'sales'
+        if collected_fields:
+            return 'intake_in_progress'
+        return 'general'
+
+    def build_llm_system_prompt(
+        self,
+        *,
+        agent: Agent,
+        context: dict,
+        collected_fields: dict,
+        missing_fields: list[str],
+        prompted_field: str | None,
+        detected_intent: str,
+    ) -> str:
+        active_field = prompted_field or (missing_fields[0] if missing_fields else '')
+        return (
+            f'{agent.persona}\n\n'
+            f'Script: {agent.script}\n'
+            f'Policy: {agent.policy_config}\n'
+            f'Context: {context}\n'
+            f'Detected intent: {detected_intent}\n'
+            f'Collected fields: {collected_fields}\n'
+            f'Missing required fields: {missing_fields}\n'
+            f'Current extraction target: {active_field}\n\n'
+            'You are responding on a live phone call. Speak naturally, briefly, and conversationally.\n'
+            'Lead with understanding the caller intent and guide the conversation from there.\n'
+            'If required fields are still missing, gather them naturally during the conversation instead of reading a rigid checklist.\n'
+            'Ask only the next most useful question. Do not ask multiple stacked questions in one turn.\n'
+            'Do not invent confirmed appointments, times, transfers, or external actions that have not actually executed.\n'
+            'If the caller already gave a detail, acknowledge it and move forward.\n'
+            'Return only the exact spoken reply text for the next turn.'
         )
 
     def build_retry_prompt(self, *, agent: Agent, field_name: str, retry_count: int) -> str:
@@ -223,12 +272,16 @@ class AgentRuntime:
         telemetry_context: dict | None = None,
     ) -> AgentTurn:
         lowered = user_text.lower()
+        detected_intent = self.detect_intent(user_text=user_text, collected_fields=collected_fields)
         if any(keyword in lowered for keyword in ESCALATION_KEYWORDS):
             return AgentTurn(
                 response_text='I am transferring you to a human specialist now.',
                 should_escalate=True,
                 escalation_reason='sensitive_or_angry_signal',
                 outcome='transfer_needed',
+                llm_mode='scripted',
+                response_source='guardrail_escalation',
+                detected_intent=detected_intent,
             )
 
         captured_fields = self.capture_required_fields(
@@ -241,16 +294,6 @@ class AgentRuntime:
             collected_fields.update(captured_fields)
 
         missing_fields = self.missing_required_fields(agent=agent, collected_fields=collected_fields)
-        if missing_fields:
-            next_field = missing_fields[0]
-            return AgentTurn(
-                response_text=self._field_prompt(agent=agent, field_name=next_field),
-                prompted_field=next_field,
-                captured_fields=captured_fields,
-                missing_fields=missing_fields,
-                outcome='partial_intake' if captured_fields else None,
-            )
-
         llm_provider = self.llm_provider_for_agent(agent=agent)
         llm_model = self.llm_model_for_agent(agent=agent)
         llm_request_overrides = self.llm_request_overrides_for_agent(agent=agent)
@@ -265,6 +308,7 @@ class AgentRuntime:
                         level='info',
                         llm_provider=llm_provider,
                         llm_model=llm_model,
+                        llm_mode='live',
                         call_id=telemetry_context.get('call_id', ''),
                         call_sid=telemetry_context.get('call_sid', ''),
                         tenant_id=telemetry_context.get('tenant_id', ''),
@@ -299,12 +343,13 @@ class AgentRuntime:
                         'messages': [
                             {
                                 'role': 'system',
-                                'content': (
-                                    f'{agent.persona}\n\n'
-                                    f'Script: {agent.script}\n'
-                                    f'Policy: {agent.policy_config}\n'
-                                    f'Context: {context}\n'
-                                    f'Collected fields: {collected_fields}'
+                                'content': self.build_llm_system_prompt(
+                                    agent=agent,
+                                    context=context,
+                                    collected_fields=collected_fields,
+                                    missing_fields=missing_fields,
+                                    prompted_field=prompted_field,
+                                    detected_intent=detected_intent,
                                 ),
                             },
                             {'role': 'user', 'content': user_text},
@@ -335,6 +380,7 @@ class AgentRuntime:
                         level='info',
                         llm_provider=llm_provider,
                         llm_model=llm_model,
+                        llm_mode='live',
                         call_id=telemetry_context.get('call_id', ''),
                         call_sid=telemetry_context.get('call_sid', ''),
                         tenant_id=telemetry_context.get('tenant_id', ''),
@@ -356,8 +402,13 @@ class AgentRuntime:
                     sanitized_text = 'Let me help with that.'
                 return AgentTurn(
                     response_text=sanitized_text,
+                    prompted_field=missing_fields[0] if missing_fields else None,
                     captured_fields=captured_fields,
-                    outcome='success',
+                    missing_fields=missing_fields,
+                    outcome='partial_intake' if missing_fields else 'success',
+                    llm_mode='live',
+                    response_source='live_llm_generation',
+                    detected_intent=detected_intent,
                 )
             except Exception as exc:
                 if telemetry_context:
@@ -366,6 +417,7 @@ class AgentRuntime:
                         level='warning',
                         llm_provider=llm_provider,
                         llm_model=llm_model,
+                        llm_mode='fallback',
                         call_id=telemetry_context.get('call_id', ''),
                         call_sid=telemetry_context.get('call_sid', ''),
                         tenant_id=telemetry_context.get('tenant_id', ''),
@@ -383,11 +435,63 @@ class AgentRuntime:
                     )
                     logger.warning('call.llm.request.failed', extra=event)
                     call_event_sink.record_event(event)
+                    call_event_sink.record_event(
+                        call_event_sink.build_event(
+                            event_type='call.llm.request.fail',
+                            level='warning',
+                            llm_provider=llm_provider,
+                            llm_model=llm_model,
+                            llm_mode='fallback',
+                            call_id=telemetry_context.get('call_id', ''),
+                            call_sid=telemetry_context.get('call_sid', ''),
+                            tenant_id=telemetry_context.get('tenant_id', ''),
+                            direction=telemetry_context.get('direction', telemetry_context.get('route', '')),
+                            route=telemetry_context.get('route', ''),
+                            agent_id=telemetry_context.get('resolved_agent_id', ''),
+                            agent_name=telemetry_context.get('resolved_agent_name', ''),
+                            correlation_id=telemetry_context.get('correlation_id', ''),
+                            from_number=telemetry_context.get('from_number', ''),
+                            to_number=telemetry_context.get('to_number', ''),
+                            llm_request_index=telemetry_context.get('llm_request_index'),
+                            llm_request_overrides=llm_request_overrides,
+                            error_type=type(exc).__name__,
+                            error=str(exc),
+                        )
+                    )
+                next_field = missing_fields[0] if missing_fields else None
+                fallback_text = (
+                    self._field_prompt(agent=agent, field_name=next_field)
+                    if next_field
+                    else 'Thank you. I have the details I need for now. What else can I help you with today?'
+                )
+                return AgentTurn(
+                    response_text=fallback_text,
+                    prompted_field=next_field,
+                    captured_fields=captured_fields,
+                    missing_fields=missing_fields,
+                    outcome='partial_intake' if missing_fields else 'success',
+                    llm_mode='fallback',
+                    response_source='fallback_backend_flow',
+                    detected_intent=detected_intent,
+                    fallback_reason='llm_request_failed',
+                )
 
+        next_field = missing_fields[0] if missing_fields else None
+        fallback_text = (
+            self._field_prompt(agent=agent, field_name=next_field)
+            if next_field
+            else 'Thank you. I have the details I need for now. What else can I help you with today?'
+        )
         return AgentTurn(
-            response_text='Thank you. I have the details I need for now. What else can I help you with today?',
+            response_text=fallback_text,
+            prompted_field=next_field,
             captured_fields=captured_fields,
-            outcome='success',
+            missing_fields=missing_fields,
+            outcome='partial_intake' if missing_fields else 'success',
+            llm_mode='scripted',
+            response_source='scripted_backend_flow',
+            detected_intent=detected_intent,
+            fallback_reason='llm_not_configured',
         )
 
     def capture_required_fields(

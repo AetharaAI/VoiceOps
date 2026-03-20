@@ -191,6 +191,7 @@ async def test_generate_response_sends_enable_thinking_in_extra_body(monkeypatch
 
     assert captured_request['json']['extra_body'] == {'chat_template_kwargs': {'enable_thinking': False}}
     assert turn.response_text == 'Let me help with that.'
+    assert turn.llm_mode == 'live'
 
 
 @pytest.mark.asyncio
@@ -242,6 +243,98 @@ async def test_booking_intent_uses_llm_path_instead_of_canned_time(monkeypatch) 
     assert turn.response_text == 'Absolutely. What day and time works best for the demo?'
     assert 'tomorrow at 2' not in turn.response_text.lower()
     assert turn.tool_calls is None
+    assert turn.llm_mode == 'live'
+
+
+@pytest.mark.asyncio
+async def test_missing_required_fields_still_use_live_llm(monkeypatch) -> None:
+    agent = _make_agent(
+        {
+            'name': {'prompt': 'Can I get your full name?'},
+            'phone': {'prompt': 'What is the best callback number?'},
+        }
+    )
+    agent.policy_config = {'runtime': {'llm_provider': 'openai', 'llm_model': 'qwen3.5-35b'}}
+
+    captured_request: dict = {}
+    original_endpoint = agent_runtime.settings.llm_endpoint
+    original_api_key = agent_runtime.settings.llm_api_key
+    agent_runtime.settings.llm_endpoint = 'https://api.aetherpro.tech/v1/chat/completions'
+    agent_runtime.settings.llm_api_key = 'test-key'
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                'choices': [
+                    {
+                        'message': {
+                            'content': 'I can help with that. What name should I put on this request?',
+                        }
+                    }
+                ]
+            }
+
+    async def fake_post(url, json, headers):  # noqa: ANN001 - httpx-compatible test shim
+        captured_request['url'] = url
+        captured_request['json'] = json
+        captured_request['headers'] = headers
+        return FakeResponse()
+
+    monkeypatch.setattr(agent_runtime.http, 'post', fake_post)
+
+    try:
+        turn = await agent_runtime.generate_response(
+            agent=agent,
+            user_text='I need to schedule service for tomorrow',
+            context={},
+            collected_fields={},
+        )
+    finally:
+        agent_runtime.settings.llm_endpoint = original_endpoint
+        agent_runtime.settings.llm_api_key = original_api_key
+
+    assert 'Missing required fields' in captured_request['json']['messages'][0]['content']
+    assert turn.llm_mode == 'live'
+    assert turn.detected_intent == 'booking'
+    assert turn.prompted_field == 'name'
+    assert turn.missing_fields == ['name', 'phone']
+    assert 'name should I put on this request' in turn.response_text
+
+
+@pytest.mark.asyncio
+async def test_llm_failure_falls_back_to_backend_prompt(monkeypatch) -> None:
+    agent = _make_agent({'phone': {'prompt': 'What is the best callback number?'}})
+    agent.policy_config = {'runtime': {'llm_provider': 'openai', 'llm_model': 'qwen3.5-35b'}}
+
+    original_endpoint = agent_runtime.settings.llm_endpoint
+    original_api_key = agent_runtime.settings.llm_api_key
+    agent_runtime.settings.llm_endpoint = 'https://api.aetherpro.tech/v1/chat/completions'
+    agent_runtime.settings.llm_api_key = 'test-key'
+
+    async def fake_post(url, json, headers):  # noqa: ANN001 - httpx-compatible test shim
+        raise RuntimeError('gateway offline')
+
+    monkeypatch.setattr(agent_runtime.http, 'post', fake_post)
+
+    try:
+        turn = await agent_runtime.generate_response(
+            agent=agent,
+            user_text='I need help with my account',
+            context={},
+            collected_fields={},
+        )
+    finally:
+        agent_runtime.settings.llm_endpoint = original_endpoint
+        agent_runtime.settings.llm_api_key = original_api_key
+
+    assert turn.llm_mode == 'fallback'
+    assert turn.response_source == 'fallback_backend_flow'
+    assert turn.fallback_reason == 'llm_request_failed'
+    assert turn.prompted_field == 'phone'
+    assert 'callback number' in turn.response_text.lower()
 
 
 @pytest.mark.asyncio

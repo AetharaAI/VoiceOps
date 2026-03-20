@@ -9,6 +9,7 @@ export default function CallsPage() {
   const [agents, setAgents] = useState([]);
   const [tenantId, setTenantId] = useState('');
   const [selectedCall, setSelectedCall] = useState(null);
+  const [selectedCallLog, setSelectedCallLog] = useState(null);
   const [message, setMessage] = useState('');
 
   const [dialForm, setDialForm] = useState({ to_number: '+15551230099', agent_id: '', campaign_id: '' });
@@ -55,10 +56,40 @@ export default function CallsPage() {
     try {
       const data = await api(`/calls/${callId}`);
       setSelectedCall(data);
+      if (data.external_call_id) {
+        try {
+          const log = await api(`/call-logs/by-call-sid/${encodeURIComponent(data.external_call_id)}`);
+          setSelectedCallLog(log);
+        } catch (_err) {
+          setSelectedCallLog(null);
+        }
+      } else {
+        setSelectedCallLog(null);
+      }
     } catch (err) {
       setMessage(err.message);
     }
   }
+
+  const selectedTelemetry = selectedCall?.outcome_tags?.telemetry || {};
+  const selectedMode = selectedCall?.outcome_tags?.llm_mode || selectedTelemetry.llm_mode || 'unknown';
+  const selectedIntent = selectedCall?.outcome_tags?.detected_intent || selectedTelemetry.detected_intent || 'unknown';
+  const selectedSource = selectedCall?.outcome_tags?.last_response_source || 'unknown';
+  const visibleEvents = (selectedCallLog?.events || []).filter((event) =>
+    [
+      'call.started',
+      'call.greeting.sent',
+      'call.llm.request.start',
+      'call.llm.request.end',
+      'call.llm.request.fail',
+      'call.intent.detected',
+      'call.required_fields.missing',
+      'call.required_fields.collected',
+      'call.fallback.engaged',
+      'call.response.generated',
+      'call.response.spoken'
+    ].includes(event.event_type)
+  );
 
   return (
     <main className="container">
@@ -115,9 +146,29 @@ export default function CallsPage() {
           <div className="card" style={{ marginBottom: 12 }}>
             <div><strong>Disposition:</strong> {selectedCall.outcome_tags.final_disposition || selectedCall.outcome || 'unknown'}</div>
             <div><strong>Duration:</strong> {selectedCall.outcome_tags.duration_seconds ?? 'n/a'}s</div>
+            <div><strong>LLM Mode:</strong> {selectedMode}</div>
+            <div><strong>Detected Intent:</strong> {selectedIntent}</div>
+            <div><strong>Last Response Source:</strong> {selectedSource}</div>
             <div><strong>Captured:</strong> {Object.keys(selectedCall.outcome_tags.fields_captured || {}).join(', ') || 'none'}</div>
             <div><strong>Missing:</strong> {(selectedCall.outcome_tags.missing_fields || []).join(', ') || 'none'}</div>
             <div><strong>Errors:</strong> {(selectedCall.outcome_tags.notable_errors || []).join(', ') || 'none'}</div>
+          </div>
+        ) : null}
+        {selectedCallLog ? (
+          <div className="card" style={{ marginBottom: 12 }}>
+            <h3>Decision Log</h3>
+            {visibleEvents.length ? (
+              visibleEvents.map((event, index) => (
+                <div key={`${event.timestamp}-${event.event_type}-${index}`} className="card" style={{ marginBottom: 8 }}>
+                  <div><strong>{event.event_type}</strong></div>
+                  <div>{event.timestamp}</div>
+                  <div>Mode: {event.llm_mode || event.payload?.llm_mode || 'n/a'}</div>
+                  <div>Payload: {JSON.stringify(event.payload || {})}</div>
+                </div>
+              ))
+            ) : (
+              <div>No decision events recorded for this call yet.</div>
+            )}
           </div>
         ) : null}
         <pre>{JSON.stringify(selectedCall, null, 2)}</pre>

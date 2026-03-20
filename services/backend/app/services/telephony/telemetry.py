@@ -40,10 +40,18 @@ class CallTelemetry:
     fallbacks: list[str] = field(default_factory=list)
     anomalies: list[str] = field(default_factory=list)
     handoff_attempts: int = 0
+    llm_mode: str = 'scripted'
+    detected_intent: str = 'general'
 
     def bind_agent(self, *, agent_id: str | None, agent_name: str | None) -> None:
         self.resolved_agent_id = agent_id or ''
         self.resolved_agent_name = agent_name or ''
+
+    def set_llm_mode(self, mode: str) -> None:
+        self.llm_mode = mode or 'scripted'
+
+    def set_detected_intent(self, intent: str) -> None:
+        self.detected_intent = intent or 'general'
 
     def mark(self, step: str, **extra: Any) -> None:
         if step in self.timestamps:
@@ -118,6 +126,7 @@ class CallTelemetry:
                 'tts_provider',
                 'tts_voice',
                 'asr_provider',
+                'llm_mode',
             }
         }
 
@@ -157,6 +166,7 @@ class CallTelemetry:
                 latency_ms=payload.get('latency_ms'),
                 llm_provider=payload.get('llm_provider', ''),
                 llm_model=payload.get('llm_model', ''),
+                llm_mode=payload.get('llm_mode', self.llm_mode),
                 tts_provider=payload.get('tts_provider', ''),
                 tts_voice=payload.get('tts_voice', ''),
                 asr_provider=payload.get('asr_provider', ''),
@@ -192,6 +202,8 @@ class CallTelemetry:
             'to_number': self.to_number,
             'resolved_agent_id': self.resolved_agent_id,
             'resolved_agent_name': self.resolved_agent_name,
+            'llm_mode': self.llm_mode,
+            'detected_intent': self.detected_intent,
             'timestamps': dict(self.timestamps),
             'latency_ms': {
                 'time_to_first_greeting_audio': self.latency_ms_since_start('tts_first_audio_chunk'),

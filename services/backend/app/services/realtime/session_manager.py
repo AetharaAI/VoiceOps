@@ -98,6 +98,9 @@ class VoiceSession:
     last_retry_reason: str = ''
     consecutive_recovery_turns: int = 0
     interrupted_turn: bool = False
+    llm_mode: str = 'scripted'
+    detected_intent: str = 'general'
+    last_response_source: str = 'scripted_backend_flow'
 
 
 class VoiceSessionManager:
@@ -257,7 +260,16 @@ class VoiceSessionManager:
         pcm_8k, _ = resample_pcm16(pcm_audio, from_rate=sample_rate, to_rate=TWILIO_SAMPLE_RATE)
         return pcm16_to_mulaw(pcm_8k)
 
-    async def send_tts(self, websocket: WebSocket, session: VoiceSession, agent: Agent, text: str) -> None:
+    async def send_tts(
+        self,
+        websocket: WebSocket,
+        session: VoiceSession,
+        agent: Agent,
+        text: str,
+        *,
+        llm_mode: str | None = None,
+        response_source: str | None = None,
+    ) -> None:
         if not session.stream_sid:
             return
 
@@ -267,6 +279,8 @@ class VoiceSessionManager:
         sanitized_text = strip_control_markup(text)
         if not sanitized_text:
             sanitized_text = RECOVERY_PROMPT
+        resolved_llm_mode = llm_mode or session.llm_mode
+        resolved_response_source = response_source or session.last_response_source
         if session.telemetry is not None and sanitized_text != text:
             session.telemetry.add_anomaly(
                 'tts_text_sanitized',
@@ -286,11 +300,23 @@ class VoiceSessionManager:
             first_chunk_logged = False
             if session.telemetry is not None:
                 session.telemetry.log(
+                    'call.response.spoken',
+                    llm_mode=resolved_llm_mode,
+                    response_source=resolved_response_source,
+                    detected_intent=session.detected_intent,
+                    tts_request_index=tts_request_index,
+                    tts_provider=tts_provider,
+                    tts_model=tts_model,
+                    tts_voice=tts_voice,
+                    text_preview=sanitized_text[:160],
+                )
+                session.telemetry.log(
                     'call.tts.request.start',
                     tts_request_index=tts_request_index,
                     tts_provider=tts_provider,
                     tts_model=tts_model,
                     tts_voice=tts_voice,
+                    llm_mode=resolved_llm_mode,
                     agent_voice=tts_voice,
                     text_preview=sanitized_text[:160],
                 )
@@ -529,6 +555,10 @@ class VoiceSessionManager:
     ) -> None:
         session.consecutive_recovery_turns += 1
         session.last_retry_reason = retry_reason
+        session.llm_mode = 'fallback'
+        session.last_response_source = 'fallback_recovery_prompt'
+        if session.telemetry is not None:
+            session.telemetry.set_llm_mode(session.llm_mode)
 
         if not current_field:
             retry_count = session.consecutive_recovery_turns
@@ -548,8 +578,31 @@ class VoiceSessionManager:
                 chosen_recovery_prompt=prompt,
                 progress_made=progress_made,
             )
+            if session.telemetry is not None:
+                session.telemetry.log(
+                    'call.fallback.engaged',
+                    llm_mode=session.llm_mode,
+                    detected_intent=session.detected_intent,
+                    fallback_reason=retry_reason,
+                    response_source=session.last_response_source,
+                )
+                session.telemetry.log(
+                    'call.response.generated',
+                    llm_mode=session.llm_mode,
+                    detected_intent=session.detected_intent,
+                    response_source=session.last_response_source,
+                    fallback_reason=retry_reason,
+                    text_preview=prompt[:160],
+                )
             await self._persist_agent_turn(session=session, db=db, agent=agent, call=call, text=prompt)
-            await self.send_tts(websocket, session, agent, prompt)
+            await self.send_tts(
+                websocket,
+                session,
+                agent,
+                prompt,
+                llm_mode=session.llm_mode,
+                response_source=session.last_response_source,
+            )
             return
 
         retry_count = session.field_retry_counts.get(current_field, 0) + 1
@@ -602,8 +655,33 @@ class VoiceSessionManager:
             chosen_recovery_prompt=prompt,
             progress_made=progress_made,
         )
+        if session.telemetry is not None:
+            session.telemetry.log(
+                'call.fallback.engaged',
+                llm_mode=session.llm_mode,
+                detected_intent=session.detected_intent,
+                fallback_reason=retry_reason,
+                response_source=session.last_response_source,
+                active_field=current_field or '',
+            )
+            session.telemetry.log(
+                'call.response.generated',
+                llm_mode=session.llm_mode,
+                detected_intent=session.detected_intent,
+                response_source=session.last_response_source,
+                fallback_reason=retry_reason,
+                active_field=current_field or '',
+                text_preview=prompt[:160],
+            )
         await self._persist_agent_turn(session=session, db=db, agent=agent, call=call, text=prompt)
-        await self.send_tts(websocket, session, agent, prompt)
+        await self.send_tts(
+            websocket,
+            session,
+            agent,
+            prompt,
+            llm_mode=session.llm_mode,
+            response_source=session.last_response_source,
+        )
 
     def _determine_disposition(self, *, call: Call, agent: Agent, session: VoiceSession) -> str:
         if call.status == CallStatus.escalated or call.outcome == 'transfer_needed':
@@ -638,6 +716,9 @@ class VoiceSessionManager:
             'retry_counts': dict(session.field_retry_counts),
             'caller_turns': session.caller_turns,
             'agent_turns': session.agent_turns,
+            'llm_mode': session.llm_mode,
+            'detected_intent': session.detected_intent,
+            'last_response_source': session.last_response_source,
             'telemetry': session.telemetry.snapshot() if session.telemetry is not None else {},
         }
 
@@ -717,9 +798,57 @@ class VoiceSessionManager:
             session.consecutive_recovery_turns = 0
             session.last_recovery_prompt = ''
             session.last_retry_reason = ''
+        session.llm_mode = turn.llm_mode
+        session.detected_intent = turn.detected_intent
+        session.last_response_source = turn.response_source
+        if session.telemetry is not None:
+            session.telemetry.set_llm_mode(turn.llm_mode)
+            session.telemetry.set_detected_intent(turn.detected_intent)
+            session.telemetry.log(
+                'call.intent.detected',
+                llm_mode=turn.llm_mode,
+                detected_intent=turn.detected_intent,
+                detection_source='heuristic',
+                transcript_text=session.last_asr_final,
+            )
+            if turn.captured_fields:
+                session.telemetry.log(
+                    'call.required_fields.collected',
+                    llm_mode=turn.llm_mode,
+                    detected_intent=turn.detected_intent,
+                    captured_fields=sorted(turn.captured_fields.keys()),
+                    captured_values=turn.captured_fields,
+                )
+            if turn.missing_fields:
+                session.telemetry.log(
+                    'call.required_fields.missing',
+                    llm_mode=turn.llm_mode,
+                    detected_intent=turn.detected_intent,
+                    missing_fields=turn.missing_fields,
+                    active_field=session.prompted_field or turn.prompted_field or '',
+                )
+            if turn.llm_mode == 'fallback' or turn.fallback_reason:
+                session.telemetry.log(
+                    'call.fallback.engaged',
+                    llm_mode=turn.llm_mode,
+                    detected_intent=turn.detected_intent,
+                    fallback_reason=turn.fallback_reason or '',
+                    response_source=turn.response_source,
+                )
+            session.telemetry.log(
+                'call.response.generated',
+                llm_mode=turn.llm_mode,
+                detected_intent=turn.detected_intent,
+                response_source=turn.response_source,
+                fallback_reason=turn.fallback_reason or '',
+                captured_fields=sorted(turn.captured_fields.keys()),
+                missing_fields=turn.missing_fields,
+                text_preview=turn.response_text[:160],
+            )
         if session.telemetry is not None:
             session.telemetry.log(
                 'call.dialog.turn_evaluated',
+                llm_mode=turn.llm_mode,
                 active_field=session.prompted_field or '',
                 progress_made=progress_made,
                 captured_fields=sorted(turn.captured_fields.keys()),
@@ -736,30 +865,19 @@ class VoiceSessionManager:
             if session.telemetry is not None:
                 session.telemetry.note_handoff_attempt(turn.escalation_reason)
 
-        current_field = session.prompted_field
-        if current_field and current_field in turn.missing_fields and current_field not in turn.captured_fields:
-            if not turn.captured_fields:
-                await self._recover_missing_field(
-                    websocket=websocket,
-                    session=session,
-                    db=db,
-                    agent=agent,
-                    call=call,
-                    current_field=current_field,
-                    retry_reason=self._retry_reason_from_transcript(
-                        session=session,
-                        transcript_text=session.last_asr_final,
-                    ),
-                    progress_made=False,
-                )
-                return
-
         session.prompted_field = turn.prompted_field
         if turn.outcome:
             call.outcome = turn.outcome
 
         await self._persist_agent_turn(session=session, db=db, agent=agent, call=call, text=turn.response_text)
-        await self.send_tts(websocket, session, agent, turn.response_text)
+        await self.send_tts(
+            websocket,
+            session,
+            agent,
+            turn.response_text,
+            llm_mode=turn.llm_mode,
+            response_source=turn.response_source,
+        )
 
     async def finalize_caller_turn(
         self,
@@ -976,7 +1094,17 @@ class VoiceSessionManager:
             correlation_id=(telephony_context.get('webhook') or {}).get('correlation_id', ''),
         )
         session.telemetry.bind_agent(agent_id=str(agent.id), agent_name=agent.name)
+        session.telemetry.set_llm_mode(session.llm_mode)
+        session.telemetry.set_detected_intent(session.detected_intent)
         session.telemetry.mark('call_connected')
+        session.telemetry.log(
+            'call.started',
+            llm_mode=session.llm_mode,
+            detected_intent=session.detected_intent,
+            call_direction=telephony_context.get('route', call.direction.value),
+            agent_persona_preview=agent.persona[:160],
+            agent_script_preview=agent.script[:160],
+        )
         resolver_context = telephony_context.get('resolver') or {}
         if resolver_context.get('fallback_reason'):
             session.telemetry.add_fallback(
@@ -1026,6 +1154,11 @@ class VoiceSessionManager:
                             collected_fields=session.collected_fields,
                         )
                         session.prompted_field = opening_turn.prompted_field
+                        session.llm_mode = opening_turn.llm_mode
+                        session.last_response_source = opening_turn.response_source
+                        session.detected_intent = opening_turn.detected_intent
+                        session.telemetry.set_llm_mode(session.llm_mode)
+                        session.telemetry.set_detected_intent(session.detected_intent)
                         session.telemetry.log(
                             'call.opening.loaded',
                             opening_prompt=opening_turn.response_text,
@@ -1040,7 +1173,21 @@ class VoiceSessionManager:
                             call=call,
                             text=opening_turn.response_text,
                         )
-                        await self.send_tts(websocket, session, agent, opening_turn.response_text)
+                        session.telemetry.log(
+                            'call.greeting.sent',
+                            llm_mode=opening_turn.llm_mode,
+                            response_source=opening_turn.response_source,
+                            greeting_text=opening_turn.response_text,
+                            prompted_field=opening_turn.prompted_field or '',
+                        )
+                        await self.send_tts(
+                            websocket,
+                            session,
+                            agent,
+                            opening_turn.response_text,
+                            llm_mode=opening_turn.llm_mode,
+                            response_source=opening_turn.response_source,
+                        )
                         await db.commit()
                 elif event_type == 'media':
                     payload = event.get('media', {}).get('payload', '')
