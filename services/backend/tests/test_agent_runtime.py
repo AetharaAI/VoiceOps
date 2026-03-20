@@ -71,6 +71,42 @@ def test_runtime_can_explicitly_enable_thinking() -> None:
     assert overrides == {'extra_body': {'chat_template_kwargs': {'enable_thinking': True}}}
 
 
+def test_tts_runtime_defaults_use_global_settings() -> None:
+    agent = _make_agent()
+
+    assert agent_runtime.tts_provider_for_agent(agent=agent) == 'aether_voice'
+    assert agent_runtime.tts_model_for_agent(agent=agent) == agent_runtime.settings.aether_voice_tts_model
+    assert agent_runtime.tts_voice_for_agent(agent=agent) == agent_runtime.settings.aether_voice_tts_voice
+    assert agent_runtime.tts_metadata_for_agent(agent=agent) == {}
+
+
+def test_tts_runtime_can_override_provider_model_voice_and_metadata() -> None:
+    agent = _make_agent()
+    agent.policy_config = {
+        'runtime': {
+            'tts_provider': 'aether_voice',
+            'tts_model': 'qwen_customvoice_streaming',
+            'tts_voice': 'qwen_serena',
+            'tts_metadata': {
+                'lane': 'live_probe',
+                'extra': {
+                    'qwen_instructions': 'Speak in a calm, telephony-friendly style.',
+                },
+            },
+        }
+    }
+
+    assert agent_runtime.tts_provider_for_agent(agent=agent) == 'aether_voice'
+    assert agent_runtime.tts_model_for_agent(agent=agent) == 'qwen_customvoice_streaming'
+    assert agent_runtime.tts_voice_for_agent(agent=agent) == 'qwen_serena'
+    assert agent_runtime.tts_metadata_for_agent(agent=agent) == {
+        'lane': 'live_probe',
+        'extra': {
+            'qwen_instructions': 'Speak in a calm, telephony-friendly style.',
+        },
+    }
+
+
 def test_recovery_prompts_vary_and_avoid_immediate_repeat() -> None:
     agent = _make_agent({'name': {'prompt': 'Can I have your full name?'}})
 

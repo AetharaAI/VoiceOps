@@ -22,18 +22,215 @@ const MODEL_OPTIONS = [
   'phi-4-instruct'
 ];
 
+const TTS_MODEL_OPTIONS = [
+  { id: 'kokoro_realtime', label: 'Kokoro Realtime', provider: 'aether_voice' },
+  { id: 'qwen_customvoice', label: 'Qwen Custom Voice Batch', provider: 'aether_voice' },
+  { id: 'qwen_customvoice_streaming', label: 'Qwen Custom Voice Streaming', provider: 'aether_voice' },
+  { id: 'qwen_voice_design', label: 'Qwen Voice Design', provider: 'aether_voice' }
+];
+const CUSTOM_TTS_MODEL_OPTION = { id: '__custom__', label: 'Custom TTS Model' };
+
 const DEFAULT_VOICE_OPTIONS = [
-  { id: 'af_bella', label: 'Bella', family: 'kokoro_realtime', gender: 'female', style_tag: 'warm', is_default: true },
-  { id: 'af_heart', label: 'Heart', family: 'kokoro_realtime', gender: 'female', style_tag: 'bright', is_default: false },
-  { id: 'af_nicole', label: 'Nicole', family: 'kokoro_realtime', gender: 'female', style_tag: 'confident', is_default: false },
-  { id: 'af_sarah', label: 'Sarah', family: 'kokoro_realtime', gender: 'female', style_tag: 'clear', is_default: false },
-  { id: 'af_sky', label: 'Sky', family: 'kokoro_realtime', gender: 'female', style_tag: 'neutral', is_default: false },
-  { id: 'am_adam', label: 'Adam', family: 'kokoro_realtime', gender: 'male', style_tag: 'steady', is_default: false },
-  { id: 'am_michael', label: 'Michael', family: 'kokoro_realtime', gender: 'male', style_tag: 'clear', is_default: false },
-  { id: 'bf_emma', label: 'Emma', family: 'kokoro_realtime', gender: 'female', style_tag: 'british', is_default: false },
-  { id: 'bf_isabella', label: 'Isabella', family: 'kokoro_realtime', gender: 'female', style_tag: 'british', is_default: false },
-  { id: 'bm_george', label: 'George', family: 'kokoro_realtime', gender: 'male', style_tag: 'british', is_default: false },
-  { id: 'bm_lewis', label: 'Lewis', family: 'kokoro_realtime', gender: 'male', style_tag: 'british', is_default: false }
+  {
+    id: 'af_bella',
+    label: 'Bella',
+    family: 'kokoro_realtime',
+    gender: 'female',
+    style_tag: 'warm',
+    provider: 'aether_voice',
+    models: ['kokoro_realtime'],
+    is_default: true
+  },
+  {
+    id: 'af_heart',
+    label: 'Heart',
+    family: 'kokoro_realtime',
+    gender: 'female',
+    style_tag: 'bright',
+    provider: 'aether_voice',
+    models: ['kokoro_realtime'],
+    is_default: false
+  },
+  {
+    id: 'af_nicole',
+    label: 'Nicole',
+    family: 'kokoro_realtime',
+    gender: 'female',
+    style_tag: 'confident',
+    provider: 'aether_voice',
+    models: ['kokoro_realtime'],
+    is_default: false
+  },
+  {
+    id: 'af_sarah',
+    label: 'Sarah',
+    family: 'kokoro_realtime',
+    gender: 'female',
+    style_tag: 'clear',
+    provider: 'aether_voice',
+    models: ['kokoro_realtime'],
+    is_default: false
+  },
+  {
+    id: 'af_sky',
+    label: 'Sky',
+    family: 'kokoro_realtime',
+    gender: 'female',
+    style_tag: 'neutral',
+    provider: 'aether_voice',
+    models: ['kokoro_realtime'],
+    is_default: false
+  },
+  {
+    id: 'am_adam',
+    label: 'Adam',
+    family: 'kokoro_realtime',
+    gender: 'male',
+    style_tag: 'steady',
+    provider: 'aether_voice',
+    models: ['kokoro_realtime'],
+    is_default: false
+  },
+  {
+    id: 'am_michael',
+    label: 'Michael',
+    family: 'kokoro_realtime',
+    gender: 'male',
+    style_tag: 'clear',
+    provider: 'aether_voice',
+    models: ['kokoro_realtime'],
+    is_default: false
+  },
+  {
+    id: 'bf_emma',
+    label: 'Emma',
+    family: 'kokoro_realtime',
+    gender: 'female',
+    style_tag: 'british',
+    provider: 'aether_voice',
+    models: ['kokoro_realtime'],
+    is_default: false
+  },
+  {
+    id: 'bf_isabella',
+    label: 'Isabella',
+    family: 'kokoro_realtime',
+    gender: 'female',
+    style_tag: 'british',
+    provider: 'aether_voice',
+    models: ['kokoro_realtime'],
+    is_default: false
+  },
+  {
+    id: 'bm_george',
+    label: 'George',
+    family: 'kokoro_realtime',
+    gender: 'male',
+    style_tag: 'british',
+    provider: 'aether_voice',
+    models: ['kokoro_realtime'],
+    is_default: false
+  },
+  {
+    id: 'bm_lewis',
+    label: 'Lewis',
+    family: 'kokoro_realtime',
+    gender: 'male',
+    style_tag: 'british',
+    provider: 'aether_voice',
+    models: ['kokoro_realtime'],
+    is_default: false
+  },
+  {
+    id: 'qwen_ryan',
+    label: 'Ryan',
+    family: 'qwen_customvoice',
+    gender: 'male',
+    style_tag: 'clear',
+    provider: 'aether_voice',
+    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    is_default: false
+  },
+  {
+    id: 'qwen_aiden',
+    label: 'Aiden',
+    family: 'qwen_customvoice',
+    gender: 'male',
+    style_tag: 'steady',
+    provider: 'aether_voice',
+    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    is_default: false
+  },
+  {
+    id: 'qwen_serena',
+    label: 'Serena',
+    family: 'qwen_customvoice',
+    gender: 'female',
+    style_tag: 'calm',
+    provider: 'aether_voice',
+    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    is_default: false
+  },
+  {
+    id: 'qwen_vivian',
+    label: 'Vivian',
+    family: 'qwen_customvoice',
+    gender: 'female',
+    style_tag: 'polished',
+    provider: 'aether_voice',
+    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    is_default: false
+  },
+  {
+    id: 'qwen_uncle_fu',
+    label: 'Uncle Fu',
+    family: 'qwen_customvoice',
+    gender: 'male',
+    style_tag: 'warm',
+    provider: 'aether_voice',
+    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    is_default: false
+  },
+  {
+    id: 'qwen_sohee',
+    label: 'Sohee',
+    family: 'qwen_customvoice',
+    gender: 'female',
+    style_tag: 'bright',
+    provider: 'aether_voice',
+    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    is_default: false
+  },
+  {
+    id: 'qwen_dylan',
+    label: 'Dylan',
+    family: 'qwen_customvoice',
+    gender: 'male',
+    style_tag: 'neutral',
+    provider: 'aether_voice',
+    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    is_default: false
+  },
+  {
+    id: 'qwen_eric',
+    label: 'Eric',
+    family: 'qwen_customvoice',
+    gender: 'male',
+    style_tag: 'confident',
+    provider: 'aether_voice',
+    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    is_default: false
+  },
+  {
+    id: 'qwen_ono_anna',
+    label: 'Ono Anna',
+    family: 'qwen_customvoice',
+    gender: 'female',
+    style_tag: 'soft',
+    provider: 'aether_voice',
+    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    is_default: false
+  }
 ];
 const CUSTOM_VOICE_OPTION = { id: '__custom__', label: 'Custom Voice' };
 
@@ -80,8 +277,11 @@ function emptyForm() {
     script: 'Qualify leads and book appointments.',
     llm_provider: 'openai',
     llm_model: 'omnicoder',
+    tts_model_select: 'kokoro_realtime',
+    custom_tts_model: '',
     tts_voice_select: 'af_bella',
     custom_tts_voice: '',
+    tts_metadata: prettyJson({}),
     required_fields: prettyJson(seedRequiredFields),
     tools_config: prettyJson(defaultToolsConfig),
     policy_config: prettyJson(defaultPolicyConfig),
@@ -99,13 +299,34 @@ function buildVoiceOptions(voices) {
 
 function voiceLabel(voice) {
   const suffix = [voice.gender, voice.style_tag].filter(Boolean).join(', ');
-  return voice.is_default ? `${voice.label} (${voice.id}, default)` : `${voice.label} (${voice.id}${suffix ? `, ${suffix}` : ''})`;
+  const modelHint = Array.isArray(voice.models) && voice.models.length ? `, ${voice.models.join(' / ')}` : '';
+  return voice.is_default
+    ? `${voice.label} (${voice.id}, default${modelHint})`
+    : `${voice.label} (${voice.id}${suffix ? `, ${suffix}` : ''}${modelHint})`;
+}
+
+function resolvedTtsModel(form) {
+  return form.tts_model_select === '__custom__' ? form.custom_tts_model.trim() : form.tts_model_select;
+}
+
+function voiceSupportsModel(voice, model) {
+  if (!model) return true;
+  if (Array.isArray(voice.models) && voice.models.length) {
+    return voice.models.includes(model);
+  }
+  return voice.family === model;
+}
+
+function compatibleVoices(voices, model) {
+  return voices.filter((voice) => voiceSupportsModel(voice, model));
 }
 
 function formFromAgent(agent, voices) {
   const runtime = runtimeConfigFromAgent(agent);
+  const ttsModel = runtime.tts_model || 'kokoro_realtime';
   const ttsVoice = runtime.tts_voice || 'af_bella';
-  const hasPresetVoice = voices.some((option) => option.id === ttsVoice);
+  const hasPresetModel = TTS_MODEL_OPTIONS.some((option) => option.id === ttsModel);
+  const hasPresetVoice = voices.some((option) => option.id === ttsVoice && voiceSupportsModel(option, ttsModel));
 
   return {
     name: agent.name,
@@ -113,8 +334,11 @@ function formFromAgent(agent, voices) {
     script: agent.script,
     llm_provider: runtime.llm_provider || 'openai',
     llm_model: runtime.llm_model || 'omnicoder',
+    tts_model_select: hasPresetModel ? ttsModel : '__custom__',
+    custom_tts_model: hasPresetModel ? '' : ttsModel,
     tts_voice_select: hasPresetVoice ? ttsVoice : '__custom__',
     custom_tts_voice: hasPresetVoice ? '' : ttsVoice,
+    tts_metadata: prettyJson(runtime.tts_metadata || {}),
     required_fields: prettyJson(agent.required_fields || {}),
     tools_config: prettyJson(agent.tools_config || {}),
     policy_config: prettyJson(stripRuntime(agent.policy_config || {})),
@@ -127,8 +351,10 @@ function resolvedVoice(form) {
 }
 
 function buildAgentPayload(form) {
+  const ttsModel = resolvedTtsModel(form) || 'kokoro_realtime';
   const voice = resolvedVoice(form) || 'af_bella';
   const policyConfig = parseJsonField('Policy Config', form.policy_config);
+  const ttsModelOption = TTS_MODEL_OPTIONS.find((option) => option.id === ttsModel);
 
   return {
     name: form.name,
@@ -143,6 +369,9 @@ function buildAgentPayload(form) {
         llm_provider: form.llm_provider,
         llm_model: form.llm_model,
         enable_thinking: false,
+        tts_provider: ttsModelOption?.provider || 'aether_voice',
+        tts_model: ttsModel,
+        tts_metadata: parseJsonField('TTS Metadata', form.tts_metadata),
         tts_voice: voice
       }
     },
@@ -221,7 +450,9 @@ export default function AgentsPage() {
     setMessage(`Loaded ${agent.name} into editor.`);
   }
 
-  const voiceOptions = buildVoiceOptions(voices);
+  const selectedTtsModel = resolvedTtsModel(form);
+  const voiceOptions = buildVoiceOptions(compatibleVoices(voices, selectedTtsModel));
+  const ttsModelOptions = [...TTS_MODEL_OPTIONS, CUSTOM_TTS_MODEL_OPTION];
 
   return (
     <main className="container">
@@ -245,6 +476,43 @@ export default function AgentsPage() {
                 </option>
               ))}
             </select>
+            <label>TTS Lane</label>
+            <select
+              value={form.tts_model_select}
+              onChange={(e) => {
+                const nextModelSelect = e.target.value;
+                const nextModel =
+                  nextModelSelect === '__custom__' ? form.custom_tts_model.trim() : nextModelSelect;
+                const nextVoices = compatibleVoices(voices, nextModel);
+                const currentVoice = form.tts_voice_select;
+                const nextVoiceSelect =
+                  currentVoice === '__custom__' || nextVoices.some((voice) => voice.id === currentVoice)
+                    ? currentVoice
+                    : nextVoices[0]?.id || '__custom__';
+
+                setForm({
+                  ...form,
+                  tts_model_select: nextModelSelect,
+                  tts_voice_select: nextVoiceSelect
+                });
+              }}
+            >
+              {ttsModelOptions.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.label}
+                </option>
+              ))}
+            </select>
+            {form.tts_model_select === '__custom__' ? (
+              <>
+                <label>Custom TTS Model</label>
+                <input
+                  value={form.custom_tts_model}
+                  onChange={(e) => setForm({ ...form, custom_tts_model: e.target.value })}
+                  placeholder="Enter provider model ID"
+                />
+              </>
+            ) : null}
             <label>Voice</label>
             <select
               value={form.tts_voice_select}
@@ -266,6 +534,8 @@ export default function AgentsPage() {
                 />
               </>
             ) : null}
+            <label>TTS Metadata JSON</label>
+            <textarea value={form.tts_metadata} onChange={(e) => setForm({ ...form, tts_metadata: e.target.value })} />
             <label>Required Fields JSON</label>
             <textarea
               value={form.required_fields}
@@ -304,6 +574,9 @@ export default function AgentsPage() {
                 <p>{agent.persona}</p>
                 <p>
                   Live model: <strong>{runtime.llm_model || 'omnicoder'}</strong>
+                </p>
+                <p>
+                  TTS lane: <strong>{runtime.tts_model || 'kokoro_realtime'}</strong>
                 </p>
                 <p>
                   Voice: <strong>{runtime.tts_voice || 'af_bella'}</strong>

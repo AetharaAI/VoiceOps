@@ -100,8 +100,18 @@ class AgentRuntime:
     def llm_model_for_agent(self, *, agent: Agent) -> str:
         return self.runtime_config(agent=agent).get('llm_model', self.settings.llm_model)
 
+    def tts_provider_for_agent(self, *, agent: Agent) -> str:
+        return self.runtime_config(agent=agent).get('tts_provider', 'aether_voice')
+
+    def tts_model_for_agent(self, *, agent: Agent) -> str:
+        return self.runtime_config(agent=agent).get('tts_model', self.settings.aether_voice_tts_model)
+
     def tts_voice_for_agent(self, *, agent: Agent) -> str:
         return self.runtime_config(agent=agent).get('tts_voice', self.settings.aether_voice_tts_voice)
+
+    def tts_metadata_for_agent(self, *, agent: Agent) -> dict:
+        metadata = self.runtime_config(agent=agent).get('tts_metadata')
+        return metadata if isinstance(metadata, dict) else {}
 
     def llm_request_overrides_for_agent(self, *, agent: Agent) -> dict:
         runtime = self.runtime_config(agent=agent)

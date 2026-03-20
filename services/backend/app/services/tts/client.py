@@ -32,29 +32,53 @@ class TTSClient:
             return ws_url
         return urljoin(self.settings.aether_voice_ws_base.rstrip('/') + '/', ws_url.lstrip('/'))
 
+    def _merge_metadata(self, base_metadata: dict, runtime_metadata: dict | None) -> dict:
+        if not runtime_metadata:
+            return base_metadata
+
+        merged = dict(base_metadata)
+        for key, value in runtime_metadata.items():
+            if key == 'extra' and isinstance(base_metadata.get('extra'), dict) and isinstance(value, dict):
+                merged['extra'] = {
+                    **base_metadata['extra'],
+                    **value,
+                }
+            else:
+                merged[key] = value
+        return merged
+
     async def stream_tts(
         self,
         *,
         text: str,
         call_id: str,
         agent_id: str,
+        provider: str | None = None,
+        model: str | None = None,
         voice: str | None = None,
+        metadata: dict | None = None,
     ) -> AsyncGenerator[bytes, None]:
+        resolved_provider = provider or 'aether_voice'
+        if resolved_provider not in {'aether_voice', 'aether_voice_gateway'}:
+            raise TTSStreamError(f'Unsupported TTS provider: {resolved_provider}')
+
         cleaned_text = strip_control_markup(text)
+        base_metadata = {
+            'source': 'voiceops_live_reply',
+            'extra': {
+                'surface': 'voiceops',
+                'call_id': call_id,
+                'agent_id': agent_id,
+                'tts_provider': resolved_provider,
+            },
+        }
         payload = {
-            'model': self.settings.aether_voice_tts_model,
+            'model': model or self.settings.aether_voice_tts_model,
             'voice': voice or self.settings.aether_voice_tts_voice,
             'sample_rate': self.settings.aether_voice_tts_sample_rate,
             'format': self.settings.aether_voice_tts_format,
             'context_mode': 'conversation',
-            'metadata': {
-                'source': 'voiceops_live_reply',
-                'extra': {
-                    'surface': 'voiceops',
-                    'call_id': call_id,
-                    'agent_id': agent_id,
-                },
-            },
+            'metadata': self._merge_metadata(base_metadata, metadata),
         }
         response = await self.http.post(
             f"{self.settings.aether_voice_http_base.rstrip('/')}/v1/tts/stream/start",

@@ -40,4 +40,6 @@ class TTSVoiceOption(BaseModel):
     gender: str
     style_tag: str
     family: str
+    provider: str
+    models: list[str] = Field(default_factory=list)
     is_default: bool = False

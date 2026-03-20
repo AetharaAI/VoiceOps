@@ -279,20 +279,25 @@ class VoiceSessionManager:
             t0 = time.perf_counter()
             session.tts_requests += 1
             tts_request_index = session.tts_requests
+            tts_provider = agent_runtime.tts_provider_for_agent(agent=agent)
+            tts_model = agent_runtime.tts_model_for_agent(agent=agent)
             tts_voice = agent_runtime.tts_voice_for_agent(agent=agent)
+            tts_metadata = agent_runtime.tts_metadata_for_agent(agent=agent)
             first_chunk_logged = False
             if session.telemetry is not None:
                 session.telemetry.log(
                     'call.tts.request.start',
                     tts_request_index=tts_request_index,
-                    tts_provider='aether_voice',
+                    tts_provider=tts_provider,
+                    tts_model=tts_model,
                     tts_voice=tts_voice,
                     agent_voice=tts_voice,
                     text_preview=sanitized_text[:160],
                 )
                 session.telemetry.mark(
                     'tts_request_started',
-                    tts_provider='aether_voice',
+                    tts_provider=tts_provider,
+                    tts_model=tts_model,
                     tts_voice=tts_voice,
                     agent_voice=tts_voice,
                     text_preview=sanitized_text[:160],
@@ -302,7 +307,10 @@ class VoiceSessionManager:
                     text=sanitized_text,
                     call_id=session.call_id,
                     agent_id=str(agent.id),
+                    provider=tts_provider,
+                    model=tts_model,
                     voice=tts_voice,
+                    metadata=tts_metadata,
                 ):
                     mulaw_audio = self._wav_chunk_to_mulaw(wav_chunk)
                     for index in range(0, len(mulaw_audio), TTS_MEDIA_CHUNK_BYTES):
@@ -311,7 +319,8 @@ class VoiceSessionManager:
                             session.telemetry.log(
                                 'call.tts.audio.first_chunk',
                                 tts_request_index=tts_request_index,
-                                tts_provider='aether_voice',
+                                tts_provider=tts_provider,
+                                tts_model=tts_model,
                                 tts_voice=tts_voice,
                                 chunk_bytes=len(mulaw_audio),
                             )
@@ -334,7 +343,8 @@ class VoiceSessionManager:
                 if session.telemetry is not None:
                     session.telemetry.warning(
                         'call.tts.request.failed',
-                        tts_provider='aether_voice',
+                        tts_provider=tts_provider,
+                        tts_model=tts_model,
                         tts_voice=tts_voice,
                         error_type=type(exc).__name__,
                         error=str(exc),
@@ -354,13 +364,15 @@ class VoiceSessionManager:
                     session.telemetry.log(
                         'call.tts.request.end',
                         tts_request_index=tts_request_index,
-                        tts_provider='aether_voice',
+                        tts_provider=tts_provider,
+                        tts_model=tts_model,
                         tts_voice=tts_voice,
                         latency_ms=round(max(0.0, (time.perf_counter() - t0) * 1000), 2),
                     )
                     session.telemetry.mark(
                         'tts_request_completed',
-                        tts_provider='aether_voice',
+                        tts_provider=tts_provider,
+                        tts_model=tts_model,
                         tts_voice=tts_voice,
                         latency_ms=round(max(0.0, (time.perf_counter() - t0) * 1000), 2),
                     )
