@@ -251,14 +251,6 @@ class AgentRuntime:
                 outcome='partial_intake' if captured_fields else None,
             )
 
-        if 'book' in lowered or 'appointment' in lowered:
-            return AgentTurn(
-                response_text='I can book that now. Does tomorrow at 2:00 PM work for you?',
-                tool_calls=[{'tool': 'booking_webhook', 'action': 'propose_time'}],
-                captured_fields=captured_fields,
-                outcome='success',
-            )
-
         llm_provider = self.llm_provider_for_agent(agent=agent)
         llm_model = self.llm_model_for_agent(agent=agent)
         llm_request_overrides = self.llm_request_overrides_for_agent(agent=agent)
