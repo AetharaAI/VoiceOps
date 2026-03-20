@@ -4,24 +4,6 @@ import { useEffect, useState } from 'react';
 import Nav from '../../components/nav';
 import { api } from '../../lib/api';
 
-const MODEL_OPTIONS = [
-  'qwen3.5-35b',
-  'qwen3.5-122',
-  'qwen3.5-9b',
-  'omnicoder',
-  'devstral-123b',
-  'qwen3.5-4b',
-  'qwen3.5-2b',
-  'qwen3.5-9b-h',
-  'jan-code-4b',
-  'nanbeige4-3b-thinking',
-  'minicpm-v',
-  'redqwen-vl',
-  'cisco-sec',
-  'vulnllm-r-7b',
-  'phi-4-instruct'
-];
-
 const TTS_MODEL_OPTIONS = [
   { id: 'kokoro_realtime', label: 'Kokoro Realtime', provider: 'aether_voice' },
   { id: 'qwen_customvoice', label: 'Qwen Custom Voice Batch', provider: 'aether_voice' },
@@ -276,7 +258,7 @@ function emptyForm() {
     persona: '',
     script: '',
     llm_provider: 'openai',
-    llm_model: 'omnicoder',
+    llm_model: '',
     opening_greeting: '',
     tts_model_select: 'kokoro_realtime',
     custom_tts_model: '',
@@ -382,8 +364,25 @@ function buildAgentPayload(form) {
   };
 }
 
+function buildLlmModelOptions(models, selectedModel) {
+  const options = [];
+
+  for (const model of models || []) {
+    if (typeof model === 'string' && model.trim() && !options.includes(model.trim())) {
+      options.push(model.trim());
+    }
+  }
+
+  if (selectedModel && !options.includes(selectedModel)) {
+    options.push(selectedModel);
+  }
+
+  return options;
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState([]);
+  const [llmModels, setLlmModels] = useState([]);
   const [voices, setVoices] = useState(DEFAULT_VOICE_OPTIONS);
   const [phoneNumbers, setPhoneNumbers] = useState([]);
   const [numberAssignments, setNumberAssignments] = useState({});
@@ -397,15 +396,21 @@ export default function AgentsPage() {
 
   async function load() {
     try {
-      const [agentResult, voiceResult, phoneResult] = await Promise.allSettled([
+      const [agentResult, voiceResult, phoneResult, modelResult] = await Promise.allSettled([
         api('/agents'),
         api('/tts/voices'),
-        api('/phone-numbers')
+        api('/phone-numbers'),
+        api('/llm/models')
       ]);
       if (agentResult.status !== 'fulfilled') {
         throw agentResult.reason;
       }
       setAgents(agentResult.value);
+      if (modelResult.status === 'fulfilled' && Array.isArray(modelResult.value)) {
+        setLlmModels(modelResult.value.filter((model) => typeof model === 'string' && model.trim()));
+      } else {
+        setLlmModels([]);
+      }
       if (voiceResult.status === 'fulfilled' && Array.isArray(voiceResult.value) && voiceResult.value.length) {
         setVoices(voiceResult.value);
       } else {
@@ -428,6 +433,17 @@ export default function AgentsPage() {
       setMessage(err.message);
     }
   }
+
+  useEffect(() => {
+    if (!editingAgentId && !form.llm_model && llmModels.length) {
+      setForm((current) => {
+        if (editingAgentId || current.llm_model || !llmModels.length) {
+          return current;
+        }
+        return { ...current, llm_model: llmModels[0] };
+      });
+    }
+  }, [editingAgentId, form.llm_model, llmModels]);
 
   async function createAgent(e) {
     e.preventDefault();
@@ -523,6 +539,7 @@ export default function AgentsPage() {
   const selectedTtsModel = resolvedTtsModel(form);
   const voiceOptions = buildVoiceOptions(compatibleVoices(voices, selectedTtsModel));
   const ttsModelOptions = [...TTS_MODEL_OPTIONS, CUSTOM_TTS_MODEL_OPTION];
+  const llmModelOptions = buildLlmModelOptions(llmModels, form.llm_model);
 
   return (
     <main className="container">
@@ -556,7 +573,10 @@ export default function AgentsPage() {
             />
             <label>Live Call Model</label>
             <select value={form.llm_model} onChange={(e) => setForm({ ...form, llm_model: e.target.value })}>
-              {MODEL_OPTIONS.map((model) => (
+              {!llmModelOptions.length ? (
+                <option value="">No live models found</option>
+              ) : null}
+              {llmModelOptions.map((model) => (
                 <option key={model} value={model}>
                   {model}
                 </option>
