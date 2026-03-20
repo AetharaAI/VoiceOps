@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     redis_streams_enabled: bool = True
     redis_call_event_stream: str = 'voiceops:call_events'
     redis_call_transcript_stream: str = 'voiceops:call_transcripts'
+    redis_call_extraction_stream: str = 'voiceops:call_extractions'
+    redis_call_action_stream: str = 'voiceops:call_actions'
 
     @property
     def database_url(self) -> str:

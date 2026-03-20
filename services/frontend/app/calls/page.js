@@ -7,6 +7,7 @@ import { api } from '../../lib/api';
 export default function CallsPage() {
   const [calls, setCalls] = useState([]);
   const [agents, setAgents] = useState([]);
+  const [campaigns, setCampaigns] = useState([]);
   const [tenantId, setTenantId] = useState('');
   const [selectedCall, setSelectedCall] = useState(null);
   const [selectedCallLog, setSelectedCallLog] = useState(null);
@@ -20,10 +21,16 @@ export default function CallsPage() {
 
   async function load() {
     try {
-      const [tenant, callList, agentList] = await Promise.all([api('/tenants/me'), api('/calls'), api('/agents')]);
+      const [tenant, callList, agentList, campaignList] = await Promise.all([
+        api('/tenants/me'),
+        api('/calls'),
+        api('/agents'),
+        api('/campaigns/outbound').catch(() => [])
+      ]);
       setTenantId(tenant.id);
       setCalls(callList);
       setAgents(agentList);
+      setCampaigns(campaignList || []);
       if (!dialForm.agent_id && agentList.length > 0) {
         setDialForm((prev) => ({ ...prev, agent_id: agentList[0].id }));
       }
@@ -75,6 +82,7 @@ export default function CallsPage() {
   const selectedMode = selectedCall?.outcome_tags?.llm_mode || selectedTelemetry.llm_mode || 'unknown';
   const selectedIntent = selectedCall?.outcome_tags?.detected_intent || selectedTelemetry.detected_intent || 'unknown';
   const selectedSource = selectedCall?.outcome_tags?.last_response_source || 'unknown';
+  const selectedArtifacts = selectedCall?.outcome_tags?.operator_artifacts || {};
   const visibleEvents = (selectedCallLog?.events || []).filter((event) =>
     [
       'call.started',
@@ -87,7 +95,9 @@ export default function CallsPage() {
       'call.required_fields.collected',
       'call.fallback.engaged',
       'call.response.generated',
-      'call.response.spoken'
+      'call.response.spoken',
+      'call.extraction.ready',
+      'call.action.ready'
     ].includes(event.event_type)
   );
 
@@ -116,10 +126,17 @@ export default function CallsPage() {
               ))}
             </select>
             <label>Campaign ID</label>
-            <input
+            <select
               value={dialForm.campaign_id}
               onChange={(e) => setDialForm({ ...dialForm, campaign_id: e.target.value })}
-            />
+            >
+              <option value="">No campaign</option>
+              {campaigns.map((campaign) => (
+                <option key={campaign.id} value={campaign.id}>
+                  {campaign.name}
+                </option>
+              ))}
+            </select>
             <button type="submit">Dial</button>
           </form>
         </section>
@@ -149,6 +166,7 @@ export default function CallsPage() {
             <div><strong>LLM Mode:</strong> {selectedMode}</div>
             <div><strong>Detected Intent:</strong> {selectedIntent}</div>
             <div><strong>Last Response Source:</strong> {selectedSource}</div>
+            <div><strong>Campaign:</strong> {campaigns.find((campaign) => campaign.id === selectedCall.campaign_id)?.name || selectedCall.campaign_id || 'none'}</div>
             <div><strong>Captured:</strong> {Object.keys(selectedCall.outcome_tags.fields_captured || {}).join(', ') || 'none'}</div>
             <div><strong>Missing:</strong> {(selectedCall.outcome_tags.missing_fields || []).join(', ') || 'none'}</div>
             <div><strong>Errors:</strong> {(selectedCall.outcome_tags.notable_errors || []).join(', ') || 'none'}</div>
@@ -169,6 +187,18 @@ export default function CallsPage() {
             ) : (
               <div>No decision events recorded for this call yet.</div>
             )}
+          </div>
+        ) : null}
+        {selectedArtifacts.extraction ? (
+          <div className="card" style={{ marginBottom: 12 }}>
+            <h3>Extraction Artifact</h3>
+            <pre>{JSON.stringify(selectedArtifacts.extraction, null, 2)}</pre>
+          </div>
+        ) : null}
+        {selectedArtifacts.action ? (
+          <div className="card" style={{ marginBottom: 12 }}>
+            <h3>Action Artifact</h3>
+            <pre>{JSON.stringify(selectedArtifacts.action, null, 2)}</pre>
           </div>
         ) : null}
         <pre>{JSON.stringify(selectedCall, null, 2)}</pre>

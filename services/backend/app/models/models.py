@@ -145,6 +145,33 @@ class Call(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class OutboundCampaign(Base):
+    __tablename__ = 'outbound_campaigns'
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('tenants.id'), nullable=False)
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey('agents.id'))
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    caller_id_number: Mapped[str | None] = mapped_column(String(32))
+    lead_source: Mapped[str | None] = mapped_column(String(255))
+    objective: Mapped[str] = mapped_column(Text, nullable=False)
+    opening_line: Mapped[str] = mapped_column(Text, nullable=False)
+    qualification_fields: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    objection_guidance: Mapped[str | None] = mapped_column(Text)
+    booking_target: Mapped[str | None] = mapped_column(Text)
+    retry_rules: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    voicemail_config: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    handoff_rules: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    crm_mapping: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    llm_config: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    tts_config: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class TranscriptSegment(Base):
     __tablename__ = 'transcript_segments'
 

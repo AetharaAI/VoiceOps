@@ -6,7 +6,8 @@ export default function Nav() {
   return (
     <nav className="nav">
       <Link href="/dashboard">Dashboard</Link>
-      <Link href="/agents">Agents</Link>
+      <Link href="/inbound">Inbound</Link>
+      <Link href="/outbound">Outbound</Link>
       <Link href="/forms">Forms</Link>
       <Link href="/calls">Calls</Link>
       <Link href="/analytics">Analytics</Link>

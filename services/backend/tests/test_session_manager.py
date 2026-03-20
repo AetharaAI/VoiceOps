@@ -1,5 +1,6 @@
 import sys
 import types
+from uuid import uuid4
 
 if 'webrtcvad' not in sys.modules:
     webrtcvad_module = types.ModuleType('webrtcvad')
@@ -16,6 +17,7 @@ if 'webrtcvad' not in sys.modules:
 
 from app.services.realtime.session_manager import VoiceSession, VoiceSessionManager
 from app.services.telephony.telemetry import CallTelemetry
+from app.models.models import Agent, Call, CallDirection, CallStatus
 
 
 def test_connected_event_is_passthrough(monkeypatch) -> None:
@@ -131,3 +133,51 @@ def test_retry_reason_prefers_interruption_flag() -> None:
     reason = manager._retry_reason_from_transcript(session=session, transcript_text='hello?')
 
     assert reason == 'caller_interruption'
+
+
+def test_build_operator_artifacts_uses_inbound_builder_config() -> None:
+    manager = VoiceSessionManager()
+    session = VoiceSession(call_id='call-123', tenant_id='tenant-123')
+    session.collected_fields = {'intent': 'book a demo', 'name': 'Bob'}
+    session.llm_mode = 'live'
+    session.detected_intent = 'booking'
+    session.last_asr_final = 'Can I make an appointment?'
+
+    agent = Agent(
+        id=uuid4(),
+        tenant_id=uuid4(),
+        name='SyndicateAI',
+        persona='Front desk',
+        script='Help callers',
+        required_fields={
+            'intent': {'prompt': 'What are you calling about?'},
+            'name': {'prompt': 'Can I have your full name?'},
+            'callback_number': {'prompt': 'Best callback number?'},
+        },
+        tools_config={'schedule_appointment': True},
+        policy_config={'runtime': {'llm_model': 'qwen3.5-35b'}},
+        workflow_dsl={
+            'workflow_type': 'inbound',
+            'inbound_builder': {
+                'crm_mapping': {'contact': ['name', 'callback_number']},
+                'action_config': {'schedule_appointment': True, 'send_sms': True},
+            },
+        },
+    )
+    call = Call(
+        id=uuid4(),
+        tenant_id=uuid4(),
+        direction=CallDirection.inbound,
+        status=CallStatus.completed,
+        from_number='+18125550100',
+        to_number='+18125550101',
+        context_payload={'telephony': {'selected_agent': {'id': 'agent-123', 'name': 'SyndicateAI'}}},
+    )
+
+    artifacts = manager._build_operator_artifacts(call=call, agent=agent, session=session)
+
+    assert artifacts['extraction']['fields_captured'] == {'intent': 'book a demo', 'name': 'Bob'}
+    assert artifacts['extraction']['missing_fields'] == ['callback_number']
+    assert artifacts['extraction']['crm_mapping'] == {'contact': ['name', 'callback_number']}
+    assert artifacts['action']['action_config'] == {'schedule_appointment': True, 'send_sms': True}
+    assert artifacts['action']['follow_up_needed'] is True

@@ -265,6 +265,22 @@ class CallEventSink:
                     'ended_ms': '' if payload.get('ended_ms') is None else str(payload.get('ended_ms')),
                 }
                 await client.xadd(self.settings.redis_call_transcript_stream, transcript_fields)
+
+            if event.get('event_type') == 'call.extraction.ready':
+                extraction_fields = {
+                    **base_fields,
+                    'artifact_type': 'extraction',
+                    'artifact_json': json.dumps(event.get('payload', {}), ensure_ascii=True, default=str),
+                }
+                await client.xadd(self.settings.redis_call_extraction_stream, extraction_fields)
+
+            if event.get('event_type') == 'call.action.ready':
+                action_fields = {
+                    **base_fields,
+                    'artifact_type': 'action',
+                    'artifact_json': json.dumps(event.get('payload', {}), ensure_ascii=True, default=str),
+                }
+                await client.xadd(self.settings.redis_call_action_stream, action_fields)
         except Exception as exc:
             logger.warning(
                 'call.stream.publish_failed',

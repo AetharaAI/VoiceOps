@@ -9,7 +9,7 @@ from app.models.models import CallDirection, CallStatus
 class OutboundCallRequest(BaseModel):
     tenant_id: str
     to_number: str
-    agent_id: str
+    agent_id: str | None = None
     campaign_id: str | None = None
     context_payload: dict[str, Any] = Field(default_factory=dict)
 

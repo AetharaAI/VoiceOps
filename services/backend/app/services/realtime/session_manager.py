@@ -696,6 +696,61 @@ class VoiceSessionManager:
             return 'partial_intake'
         return 'failed_intake'
 
+    def _inbound_builder_config(self, *, agent: Agent) -> dict[str, Any]:
+        workflow = agent.workflow_dsl or {}
+        if not isinstance(workflow, dict):
+            return {}
+        builder = workflow.get('inbound_builder') or {}
+        return builder if isinstance(builder, dict) else {}
+
+    def _build_operator_artifacts(self, *, call: Call, agent: Agent, session: VoiceSession) -> dict[str, Any]:
+        builder = self._inbound_builder_config(agent=agent)
+        workflow = agent.workflow_dsl or {}
+        workflow_type = workflow.get('workflow_type') if isinstance(workflow, dict) else None
+        required_fields = agent.required_fields if isinstance(agent.required_fields, dict) else {}
+        tools_config = agent.tools_config if isinstance(agent.tools_config, dict) else {}
+        context_telephony = ((call.context_payload or {}).get('telephony') or {}) if isinstance(call.context_payload, dict) else {}
+        missing_fields = agent_runtime.missing_required_fields(agent=agent, collected_fields=session.collected_fields)
+        disposition = self._determine_disposition(call=call, agent=agent, session=session)
+
+        extraction_artifact = {
+            'artifact_type': 'extraction',
+            'workflow_type': workflow_type or ('outbound' if call.direction.value == 'outbound' else 'inbound'),
+            'call_id': str(call.id),
+            'call_sid': call.external_call_id or '',
+            'direction': call.direction.value,
+            'llm_mode': session.llm_mode,
+            'detected_intent': session.detected_intent,
+            'fields_captured': dict(session.collected_fields),
+            'missing_fields': missing_fields,
+            'required_fields': required_fields,
+            'crm_mapping': builder.get('crm_mapping') or {},
+            'last_caller_utterance': session.last_asr_final,
+            'campaign': context_telephony.get('campaign') or {},
+        }
+
+        action_artifact = {
+            'artifact_type': 'action',
+            'workflow_type': workflow_type or ('outbound' if call.direction.value == 'outbound' else 'inbound'),
+            'call_id': str(call.id),
+            'call_sid': call.external_call_id or '',
+            'direction': call.direction.value,
+            'llm_mode': session.llm_mode,
+            'detected_intent': session.detected_intent,
+            'final_disposition': disposition,
+            'call_outcome': call.outcome or disposition,
+            'escalation_reason': call.escalation_reason,
+            'action_config': builder.get('action_config') or tools_config,
+            'follow_up_needed': bool(missing_fields) or disposition in {'partial_intake', 'transfer_needed'},
+            'selected_agent': context_telephony.get('selected_agent') or {},
+            'campaign': context_telephony.get('campaign') or {},
+        }
+
+        return {
+            'extraction': extraction_artifact,
+            'action': action_artifact,
+        }
+
     def _build_call_summary(self, *, call: Call, agent: Agent, session: VoiceSession) -> dict:
         ended_at = call.ended_at or datetime.now(timezone.utc)
         duration_seconds = None
@@ -704,6 +759,7 @@ class VoiceSessionManager:
 
         disposition = self._determine_disposition(call=call, agent=agent, session=session)
         missing_fields = agent_runtime.missing_required_fields(agent=agent, collected_fields=session.collected_fields)
+        operator_artifacts = self._build_operator_artifacts(call=call, agent=agent, session=session)
 
         return {
             'call_id': str(call.id),
@@ -719,6 +775,7 @@ class VoiceSessionManager:
             'llm_mode': session.llm_mode,
             'detected_intent': session.detected_intent,
             'last_response_source': session.last_response_source,
+            'operator_artifacts': operator_artifacts,
             'telemetry': session.telemetry.snapshot() if session.telemetry is not None else {},
         }
 
@@ -777,6 +834,47 @@ class VoiceSessionManager:
                     fallbacks=summary.get('telemetry', {}).get('fallbacks', []),
                     anomalies=summary.get('telemetry', {}).get('anomalies', []),
                     handoff_attempts=summary.get('telemetry', {}).get('handoff_attempts', 0),
+                )
+            )
+            artifacts = summary.get('operator_artifacts', {})
+            extraction_artifact = artifacts.get('extraction', {})
+            action_artifact = artifacts.get('action', {})
+            call_event_sink.record_event(
+                call_event_sink.build_event(
+                    event_type='call.extraction.ready',
+                    level='info',
+                    call_id=str(call.id),
+                    call_sid=call.external_call_id or '',
+                    tenant_id=session.tenant_id,
+                    direction=session.telemetry.route,
+                    route=session.telemetry.route,
+                    agent_id=session.telemetry.resolved_agent_id,
+                    agent_name=session.telemetry.resolved_agent_name,
+                    correlation_id=session.telemetry.correlation_id,
+                    from_number=call.from_number,
+                    to_number=call.to_number,
+                    llm_mode=session.llm_mode,
+                    llm_model=(agent.policy_config or {}).get('runtime', {}).get('llm_model', ''),
+                    extraction_artifact=extraction_artifact,
+                )
+            )
+            call_event_sink.record_event(
+                call_event_sink.build_event(
+                    event_type='call.action.ready',
+                    level='info',
+                    call_id=str(call.id),
+                    call_sid=call.external_call_id or '',
+                    tenant_id=session.tenant_id,
+                    direction=session.telemetry.route,
+                    route=session.telemetry.route,
+                    agent_id=session.telemetry.resolved_agent_id,
+                    agent_name=session.telemetry.resolved_agent_name,
+                    correlation_id=session.telemetry.correlation_id,
+                    from_number=call.from_number,
+                    to_number=call.to_number,
+                    llm_mode=session.llm_mode,
+                    llm_model=(agent.policy_config or {}).get('runtime', {}).get('llm_model', ''),
+                    action_artifact=action_artifact,
                 )
             )
         await db.commit()
