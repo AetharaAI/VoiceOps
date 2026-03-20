@@ -1,0 +1,30 @@
+{
+  "intent": {
+    "prompt": "What are you calling about today? For example, booking a demo, learning about our services, asking about private deployment, or getting support.",
+    "required": true
+  },
+  "name": {
+    "prompt": "Can I have your full name?",
+    "required_when": ["appointment", "demo", "service_inquiry", "private_deployment", "support"]
+  },
+  "callback_number": {
+    "prompt": "What’s the best callback number in case we get disconnected or need to follow up?",
+    "required_when": ["appointment", "demo", "service_inquiry", "private_deployment", "support"]
+  },
+  "company_name": {
+    "prompt": "What company are you with?",
+    "required_when": ["service_inquiry", "private_deployment", "support"]
+  },
+  "request_summary": {
+    "prompt": "Can you briefly tell me what you need help with?",
+    "required_when": ["appointment", "demo", "service_inquiry", "private_deployment", "support"]
+  },
+  "preferred_time": {
+    "prompt": "Do you have a preferred time for a callback or demo?",
+    "required_when": ["appointment", "demo"]
+  },
+  "privacy_requirements": {
+    "prompt": "Are there any privacy, data control, or deployment requirements you want us to know about?",
+    "required_when": ["private_deployment"]
+  }
+}

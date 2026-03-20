@@ -50,7 +50,7 @@ def test_build_opening_prompt_uses_first_required_field() -> None:
     turn = agent_runtime.build_opening_prompt(agent=agent, collected_fields={})
 
     assert turn.prompted_field == 'name'
-    assert 'Can I get your full name?' in turn.response_text
+    assert 'Hello, this is Support. How can I help today?' == turn.response_text
 
 
 def test_build_opening_prompt_prefers_custom_runtime_greeting() -> None:
@@ -64,8 +64,7 @@ def test_build_opening_prompt_prefers_custom_runtime_greeting() -> None:
     turn = agent_runtime.build_opening_prompt(agent=agent, collected_fields={})
 
     assert turn.prompted_field == 'name'
-    assert turn.response_text.startswith('Thank you for calling Syndicate AI.')
-    assert 'full name' in turn.response_text
+    assert turn.response_text == 'Thank you for calling Syndicate AI. I can get you routed.'
 
 
 def test_omnicoder_defaults_to_thinking_disabled() -> None:

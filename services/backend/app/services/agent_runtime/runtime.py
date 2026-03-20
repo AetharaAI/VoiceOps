@@ -142,16 +142,18 @@ class AgentRuntime:
     def build_opening_prompt(self, *, agent: Agent, collected_fields: dict) -> AgentTurn:
         missing_fields = self.missing_required_fields(agent=agent, collected_fields=collected_fields)
         custom_greeting = self.opening_greeting_for_agent(agent=agent)
+        first_missing_field = missing_fields[0] if missing_fields else None
         if not missing_fields:
             response_text = custom_greeting or f'Hello, this is {agent.name}. How can I help today?'
             return AgentTurn(response_text=response_text)
 
-        prompt_field = missing_fields[0]
-        prompt = self._field_prompt(agent=agent, field_name=prompt_field)
-        response_text = f'{custom_greeting} {prompt}'.strip() if custom_greeting else f'Hello, this is {agent.name}. {prompt}'
+        if custom_greeting:
+            response_text = custom_greeting
+        else:
+            response_text = f'Hello, this is {agent.name}. How can I help today?'
         return AgentTurn(
             response_text=response_text,
-            prompted_field=prompt_field,
+            prompted_field=first_missing_field,
             missing_fields=missing_fields,
         )
 
