@@ -75,6 +75,7 @@ export default function OutboundPage() {
   const [agents, setAgents] = useState([]);
   const [phoneNumbers, setPhoneNumbers] = useState([]);
   const [llmModels, setLlmModels] = useState([]);
+  const [llmModelError, setLlmModelError] = useState('');
   const [voices, setVoices] = useState(DEFAULT_VOICE_OPTIONS);
   const [editingCampaignId, setEditingCampaignId] = useState('');
   const [form, setForm] = useState(defaultOutboundForm());
@@ -86,18 +87,42 @@ export default function OutboundPage() {
 
   async function load() {
     try {
-      const [campaignList, agentList, numberList, modelList, voiceList] = await Promise.all([
-        api('/campaigns/outbound').catch(() => []),
+      const [campaignResult, agentResult, numberResult, modelResult, voiceResult] = await Promise.allSettled([
+        api('/campaigns/outbound'),
         api('/agents'),
         api('/phone-numbers'),
-        api('/llm/models').catch(() => []),
-        api('/tts/voices').catch(() => DEFAULT_VOICE_OPTIONS)
+        api('/llm/models'),
+        api('/tts/voices')
       ]);
-      setCampaigns(campaignList || []);
-      setAgents(agentList || []);
-      setPhoneNumbers(numberList || []);
-      setLlmModels(Array.isArray(modelList) ? modelList : []);
-      setVoices(Array.isArray(voiceList) && voiceList.length ? voiceList : DEFAULT_VOICE_OPTIONS);
+
+      if (campaignResult.status === 'fulfilled') {
+        setCampaigns(campaignResult.value || []);
+      } else {
+        setCampaigns([]);
+      }
+      if (agentResult.status !== 'fulfilled') {
+        throw agentResult.reason;
+      }
+      if (numberResult.status !== 'fulfilled') {
+        throw numberResult.reason;
+      }
+
+      setAgents(agentResult.value || []);
+      setPhoneNumbers(numberResult.value || []);
+
+      if (modelResult.status === 'fulfilled' && Array.isArray(modelResult.value)) {
+        setLlmModels(modelResult.value);
+        setLlmModelError('');
+      } else {
+        setLlmModels([]);
+        setLlmModelError(modelResult.status === 'rejected' ? modelResult.reason.message : 'Live model list failed.');
+      }
+
+      if (voiceResult.status === 'fulfilled' && Array.isArray(voiceResult.value) && voiceResult.value.length) {
+        setVoices(voiceResult.value);
+      } else {
+        setVoices(DEFAULT_VOICE_OPTIONS);
+      }
     } catch (err) {
       setMessage(err.message);
     }
@@ -153,6 +178,11 @@ export default function OutboundPage() {
           Build outbound campaigns as a separate lane from inbound answering. Save campaign objective, qualification,
           retry behavior, CRM mapping, and runtime selection in one place.
         </p>
+        {llmModelError ? (
+          <p style={{ color: '#b42318', marginBottom: 0 }}>
+            Live model list unavailable: {llmModelError}
+          </p>
+        ) : null}
       </section>
 
       <div className="grid-2">

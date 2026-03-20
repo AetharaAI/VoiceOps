@@ -91,6 +91,7 @@ function buildAgentPayload(form) {
 export default function InboundPage() {
   const [agents, setAgents] = useState([]);
   const [llmModels, setLlmModels] = useState([]);
+  const [llmModelError, setLlmModelError] = useState('');
   const [voices, setVoices] = useState(DEFAULT_VOICE_OPTIONS);
   const [phoneNumbers, setPhoneNumbers] = useState([]);
   const [editingAgentId, setEditingAgentId] = useState('');
@@ -103,22 +104,41 @@ export default function InboundPage() {
 
   async function load() {
     try {
-      const [agentList, numberList, modelList, voiceList] = await Promise.all([
+      const [agentList, numberList, modelResult, voiceResult] = await Promise.allSettled([
         api('/agents'),
         api('/phone-numbers'),
-        api('/llm/models').catch(() => []),
-        api('/tts/voices').catch(() => DEFAULT_VOICE_OPTIONS)
+        api('/llm/models'),
+        api('/tts/voices')
       ]);
 
-      const inboundAgents = (agentList || []).filter((agent) => {
+      if (agentList.status !== 'fulfilled') {
+        throw agentList.reason;
+      }
+      if (numberList.status !== 'fulfilled') {
+        throw numberList.reason;
+      }
+
+      const inboundAgents = (agentList.value || []).filter((agent) => {
         const kind = agent?.workflow_dsl?.workflow_type;
         return !kind || kind === 'inbound';
       });
 
       setAgents(inboundAgents);
-      setPhoneNumbers(numberList || []);
-      setLlmModels(Array.isArray(modelList) ? modelList : []);
-      setVoices(Array.isArray(voiceList) && voiceList.length ? voiceList : DEFAULT_VOICE_OPTIONS);
+      setPhoneNumbers(numberList.value || []);
+
+      if (modelResult.status === 'fulfilled' && Array.isArray(modelResult.value)) {
+        setLlmModels(modelResult.value);
+        setLlmModelError('');
+      } else {
+        setLlmModels([]);
+        setLlmModelError(modelResult.status === 'rejected' ? modelResult.reason.message : 'Live model list failed.');
+      }
+
+      if (voiceResult.status === 'fulfilled' && Array.isArray(voiceResult.value) && voiceResult.value.length) {
+        setVoices(voiceResult.value);
+      } else {
+        setVoices(DEFAULT_VOICE_OPTIONS);
+      }
     } catch (err) {
       setMessage(err.message);
     }
@@ -193,6 +213,11 @@ export default function InboundPage() {
           Configure who answers, how the greeting sounds, what gets extracted, and which actions can execute after the
           live ASR → LLM → TTS loop begins.
         </p>
+        {llmModelError ? (
+          <p style={{ color: '#b42318', marginBottom: 0 }}>
+            Live model list unavailable: {llmModelError}
+          </p>
+        ) : null}
       </section>
 
       <div className="grid-2">

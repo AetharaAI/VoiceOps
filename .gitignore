@@ -13,4 +13,7 @@ twillo-recovery-code/
 *.pem
 *.key
 logs/calls/
+logs/*.md
+logs/*.json
+logs/*.jsonl
 test-calls-logs/

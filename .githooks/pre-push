@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+zero_sha="0000000000000000000000000000000000000000"
+
+twilio_sid_pattern='AC[a-f0-9]{32}'
+
+scan_range() {
+  local range="$1"
+
+  if git diff --name-only "$range" | grep -E '^logs/' >/dev/null 2>&1; then
+    echo "Push blocked: commits in this push contain files under logs/." >&2
+    echo "Move diagnostic logs out of git history before pushing." >&2
+    return 1
+  fi
+
+  if git log -p --no-ext-diff --unified=0 "$range" | grep -E "$twilio_sid_pattern" >/dev/null 2>&1; then
+    echo "Push blocked: Twilio Account SID pattern detected in outgoing commit diff." >&2
+    echo "Rewrite the local commit history to remove the SID before pushing." >&2
+    return 1
+  fi
+}
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [[ -z "${local_sha:-}" ]]; then
+    continue
+  fi
+
+  if [[ "$local_sha" == "$zero_sha" ]]; then
+    continue
+  fi
+
+  if [[ "$remote_sha" == "$zero_sha" ]]; then
+    scan_range "$local_sha" || exit 1
+  else
+    scan_range "$remote_sha..$local_sha" || exit 1
+  fi
+done
+
+exit 0
