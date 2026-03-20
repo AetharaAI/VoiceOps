@@ -14,6 +14,7 @@ class AgentCreate(BaseModel):
 
 
 class AgentUpdateConfig(BaseModel):
+    name: str | None = None
     persona: str | None = None
     script: str | None = None
     required_fields: dict[str, Any] | None = None

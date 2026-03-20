@@ -272,11 +272,12 @@ function stripRuntime(policyConfig) {
 
 function emptyForm() {
   return {
-    name: 'Sales Agent',
-    persona: 'Helpful and concise revenue assistant',
-    script: 'Qualify leads and book appointments.',
+    name: '',
+    persona: '',
+    script: '',
     llm_provider: 'openai',
     llm_model: 'omnicoder',
+    opening_greeting: '',
     tts_model_select: 'kokoro_realtime',
     custom_tts_model: '',
     tts_voice_select: 'af_bella',
@@ -334,6 +335,7 @@ function formFromAgent(agent, voices) {
     script: agent.script,
     llm_provider: runtime.llm_provider || 'openai',
     llm_model: runtime.llm_model || 'omnicoder',
+    opening_greeting: runtime.opening_greeting || '',
     tts_model_select: hasPresetModel ? ttsModel : '__custom__',
     custom_tts_model: hasPresetModel ? '' : ttsModel,
     tts_voice_select: hasPresetVoice ? ttsVoice : '__custom__',
@@ -369,6 +371,7 @@ function buildAgentPayload(form) {
         llm_provider: form.llm_provider,
         llm_model: form.llm_model,
         enable_thinking: false,
+        opening_greeting: form.opening_greeting.trim(),
         tts_provider: ttsModelOption?.provider || 'aether_voice',
         tts_model: ttsModel,
         tts_metadata: parseJsonField('TTS Metadata', form.tts_metadata),
@@ -382,6 +385,8 @@ function buildAgentPayload(form) {
 export default function AgentsPage() {
   const [agents, setAgents] = useState([]);
   const [voices, setVoices] = useState(DEFAULT_VOICE_OPTIONS);
+  const [phoneNumbers, setPhoneNumbers] = useState([]);
+  const [numberAssignments, setNumberAssignments] = useState({});
   const [message, setMessage] = useState('');
   const [editingAgentId, setEditingAgentId] = useState('');
   const [form, setForm] = useState(emptyForm());
@@ -392,7 +397,11 @@ export default function AgentsPage() {
 
   async function load() {
     try {
-      const [agentResult, voiceResult] = await Promise.allSettled([api('/agents'), api('/tts/voices')]);
+      const [agentResult, voiceResult, phoneResult] = await Promise.allSettled([
+        api('/agents'),
+        api('/tts/voices'),
+        api('/phone-numbers')
+      ]);
       if (agentResult.status !== 'fulfilled') {
         throw agentResult.reason;
       }
@@ -402,6 +411,19 @@ export default function AgentsPage() {
       } else {
         setVoices(DEFAULT_VOICE_OPTIONS);
       }
+      if (phoneResult.status === 'fulfilled' && Array.isArray(phoneResult.value)) {
+        setPhoneNumbers(phoneResult.value);
+        setNumberAssignments(
+          Object.fromEntries(
+            phoneResult.value
+              .filter((row) => row.agent_id)
+              .map((row) => [row.agent_id, row.id])
+          )
+        );
+      } else {
+        setPhoneNumbers([]);
+        setNumberAssignments({});
+      }
     } catch (err) {
       setMessage(err.message);
     }
@@ -410,13 +432,13 @@ export default function AgentsPage() {
   async function createAgent(e) {
     e.preventDefault();
     try {
-      await api('/agents', {
+      const createdAgent = await api('/agents', {
         method: 'POST',
         body: JSON.stringify(buildAgentPayload(form))
       });
-      setMessage('Agent created.');
-      setEditingAgentId('');
-      setForm(emptyForm());
+      setEditingAgentId(createdAgent.id);
+      setForm(formFromAgent(createdAgent, voices));
+      setMessage(`Agent created. Now edit and save ${createdAgent.name} here.`);
       await load();
     } catch (err) {
       setMessage(`Create failed: ${err.message}`);
@@ -426,9 +448,10 @@ export default function AgentsPage() {
   async function saveAgent(agentId) {
     try {
       const payload = buildAgentPayload(form);
-      await api(`/agents/${agentId}/config`, {
+      const updatedAgent = await api(`/agents/${agentId}/config`, {
         method: 'PUT',
         body: JSON.stringify({
+          name: payload.name,
           persona: payload.persona,
           script: payload.script,
           required_fields: payload.required_fields,
@@ -437,7 +460,11 @@ export default function AgentsPage() {
           workflow_dsl: payload.workflow_dsl
         })
       });
-      setMessage('Agent updated.');
+      if (numberAssignments[agentId]) {
+        await assignNumberToAgent(agentId, { suppressMessage: true });
+      }
+      setForm(formFromAgent(updatedAgent, voices));
+      setMessage(`Saved ${updatedAgent.name}.`);
       await load();
     } catch (err) {
       setMessage(`Update failed: ${err.message}`);
@@ -450,6 +477,49 @@ export default function AgentsPage() {
     setMessage(`Loaded ${agent.name} into editor.`);
   }
 
+  async function assignNumberToAgent(agentId, options = {}) {
+    const phoneRowId = numberAssignments[agentId];
+    if (!phoneRowId) {
+      if (!options.suppressMessage) {
+        setMessage('Choose a phone number to map first.');
+      }
+      return;
+    }
+
+    const phoneRow = phoneNumbers.find((row) => row.id === phoneRowId);
+    if (!phoneRow) {
+      if (!options.suppressMessage) {
+        setMessage('Selected phone number mapping was not found.');
+      }
+      return;
+    }
+
+    try {
+      await api('/phone-numbers', {
+        method: 'POST',
+        body: JSON.stringify({
+          phone_number: phoneRow.phone_number,
+          provider: phoneRow.provider,
+          agent_id: agentId
+        })
+      });
+      await load();
+      const agent = agents.find((item) => item.id === agentId);
+      if (!options.suppressMessage) {
+        setMessage(`Inbound number ${phoneRow.phone_number} now routes to ${agent?.name || 'that agent'}.`);
+      }
+    } catch (err) {
+      if (!options.suppressMessage) {
+        setMessage(`Number assignment failed: ${err.message}`);
+      }
+      throw err;
+    }
+  }
+
+  function assignedPhoneNumbers(agentId) {
+    return phoneNumbers.filter((row) => row.agent_id === agentId);
+  }
+
   const selectedTtsModel = resolvedTtsModel(form);
   const voiceOptions = buildVoiceOptions(compatibleVoices(voices, selectedTtsModel));
   const ttsModelOptions = [...TTS_MODEL_OPTIONS, CUSTOM_TTS_MODEL_OPTION];
@@ -458,16 +528,32 @@ export default function AgentsPage() {
     <main className="container">
       <Nav />
       <h1>Agent Builder</h1>
+      <section className="card">
+        <strong>Inbound Answering Rule</strong>
+        <p>
+          The phone number answers with the agent mapped to that number. If a number is not mapped, inbound falls back
+          to the oldest active agent, which is why the wrong voice can answer.
+        </p>
+      </section>
       <div className="grid-2">
         <section className="card">
           <h2>{editingAgentId ? 'Edit Agent Runtime' : 'Create Agent Persona'}</h2>
-          <form onSubmit={createAgent}>
+          <form onSubmit={editingAgentId ? (e) => {
+            e.preventDefault();
+            return saveAgent(editingAgentId);
+          } : createAgent}>
             <label>Name</label>
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             <label>Persona</label>
             <textarea value={form.persona} onChange={(e) => setForm({ ...form, persona: e.target.value })} />
             <label>Script</label>
             <textarea value={form.script} onChange={(e) => setForm({ ...form, script: e.target.value })} />
+            <label>Opening Greeting</label>
+            <textarea
+              value={form.opening_greeting}
+              onChange={(e) => setForm({ ...form, opening_greeting: e.target.value })}
+              placeholder="Thank you for calling Syndicate AI..."
+            />
             <label>Live Call Model</label>
             <select value={form.llm_model} onChange={(e) => setForm({ ...form, llm_model: e.target.value })}>
               {MODEL_OPTIONS.map((model) => (
@@ -536,6 +622,27 @@ export default function AgentsPage() {
             ) : null}
             <label>TTS Metadata JSON</label>
             <textarea value={form.tts_metadata} onChange={(e) => setForm({ ...form, tts_metadata: e.target.value })} />
+            {editingAgentId ? (
+              <>
+                <label>Inbound Answering Number</label>
+                <select
+                  value={numberAssignments[editingAgentId] || ''}
+                  onChange={(e) =>
+                    setNumberAssignments({
+                      ...numberAssignments,
+                      [editingAgentId]: e.target.value
+                    })
+                  }
+                >
+                  <option value="">No number mapped</option>
+                  {phoneNumbers.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.phone_number} ({row.provider})
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : null}
             <label>Required Fields JSON</label>
             <textarea
               value={form.required_fields}
@@ -547,7 +654,7 @@ export default function AgentsPage() {
             <textarea value={form.policy_config} onChange={(e) => setForm({ ...form, policy_config: e.target.value })} />
             <label>Workflow DSL JSON</label>
             <textarea value={form.workflow_dsl} onChange={(e) => setForm({ ...form, workflow_dsl: e.target.value })} />
-            <button type="submit">Create Agent</button>
+            <button type="submit">{editingAgentId ? 'Save Loaded Agent' : 'Create Agent'}</button>
             {editingAgentId ? (
               <button
                 type="button"
@@ -555,10 +662,10 @@ export default function AgentsPage() {
                 onClick={() => {
                   setEditingAgentId('');
                   setForm(emptyForm());
-                  setMessage('Editor reset to new-agent defaults.');
+                  setMessage('Editor reset for a new agent.');
                 }}
               >
-                Reset Editor
+                New Agent
               </button>
             ) : null}
           </form>
@@ -581,11 +688,19 @@ export default function AgentsPage() {
                 <p>
                   Voice: <strong>{runtime.tts_voice || 'af_bella'}</strong>
                 </p>
+                <p>
+                  Greeting: <strong>{runtime.opening_greeting || `Hello, this is ${agent.name}.`}</strong>
+                </p>
+                <p>
+                  Inbound numbers:{' '}
+                  <strong>
+                    {assignedPhoneNumbers(agent.id).length
+                      ? assignedPhoneNumbers(agent.id).map((row) => row.phone_number).join(', ')
+                      : 'Unassigned'}
+                  </strong>
+                </p>
                 <button className="secondary" onClick={() => loadIntoEditor(agent)}>
-                  Load Into Editor
-                </button>
-                <button className="secondary" onClick={() => saveAgent(agent.id)}>
-                  Save Editor To This Agent
+                  Edit This Agent
                 </button>
               </div>
             );

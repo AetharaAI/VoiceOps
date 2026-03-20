@@ -113,6 +113,10 @@ class AgentRuntime:
         metadata = self.runtime_config(agent=agent).get('tts_metadata')
         return metadata if isinstance(metadata, dict) else {}
 
+    def opening_greeting_for_agent(self, *, agent: Agent) -> str:
+        greeting = self.runtime_config(agent=agent).get('opening_greeting', '')
+        return greeting.strip() if isinstance(greeting, str) else ''
+
     def llm_request_overrides_for_agent(self, *, agent: Agent) -> dict:
         runtime = self.runtime_config(agent=agent)
         model = self.llm_model_for_agent(agent=agent)
@@ -137,13 +141,16 @@ class AgentRuntime:
 
     def build_opening_prompt(self, *, agent: Agent, collected_fields: dict) -> AgentTurn:
         missing_fields = self.missing_required_fields(agent=agent, collected_fields=collected_fields)
+        custom_greeting = self.opening_greeting_for_agent(agent=agent)
         if not missing_fields:
-            return AgentTurn(response_text=f'Hello, this is {agent.name}. How can I help today?')
+            response_text = custom_greeting or f'Hello, this is {agent.name}. How can I help today?'
+            return AgentTurn(response_text=response_text)
 
         prompt_field = missing_fields[0]
         prompt = self._field_prompt(agent=agent, field_name=prompt_field)
+        response_text = f'{custom_greeting} {prompt}'.strip() if custom_greeting else f'Hello, this is {agent.name}. {prompt}'
         return AgentTurn(
-            response_text=f'Hello, this is {agent.name}. {prompt}',
+            response_text=response_text,
             prompted_field=prompt_field,
             missing_fields=missing_fields,
         )
