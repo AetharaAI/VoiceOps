@@ -1,4 +1,5 @@
 import './globals.css';
+import AuthGate from '../components/auth-gate';
 
 export const metadata = {
   title: 'Aether VoiceOps',
@@ -10,6 +11,7 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         <div className="bg-glow" />
+        <AuthGate />
         {children}
       </body>
     </html>

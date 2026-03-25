@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { setStoredToken } from '../../lib/auth';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000/api/v1';
 
@@ -27,7 +28,7 @@ export default function LoginPage() {
       });
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
-      localStorage.setItem('voiceops_token', data.access_token);
+      setStoredToken(data.access_token);
       setMessage('Login successful.');
       router.push('/dashboard');
     } catch (error) {
@@ -55,7 +56,7 @@ export default function LoginPage() {
       });
       if (!response.ok) throw new Error(await response.text());
       const data = await response.json();
-      localStorage.setItem('voiceops_token', data.access_token);
+      setStoredToken(data.access_token);
       setMessage('Bootstrap complete.');
       router.push('/dashboard');
     } catch (error) {

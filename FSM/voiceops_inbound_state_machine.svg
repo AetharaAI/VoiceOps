@@ -1,0 +1,149 @@
+<svg width="100%" viewBox="0 0 680 1080" xmlns="http://www.w3.org/2000/svg" style="background:#0d1117;font-family:'Segoe UI',system-ui,sans-serif">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
+
+<!-- S0: RING / WEBHOOK -->
+<g>
+  <rect x="220" y="30" width="240" height="56" rx="8" fill="#2c2c2a" stroke="#5f5e5a" stroke-width="0.5"/>
+  <text x="340" y="48" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#d3d1c7">S0: Call incoming</text>
+  <text x="340" y="68" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#b4b2a9">Twilio webhook fires</text>
+</g>
+
+<!-- Arrow S0 → S1 -->
+<line x1="340" y1="86" x2="340" y2="120" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="348" y="106" text-anchor="start" font-size="12" fill="#9fe1cb">ANI lookup starts async</text>
+
+<!-- S1: GREETING -->
+<g>
+  <rect x="190" y="120" width="300" height="56" rx="8" fill="#085041" stroke="#5dcaa5" stroke-width="0.5"/>
+  <text x="340" y="138" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#9fe1cb">S1: Greeting</text>
+  <text x="340" y="158" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5dcaa5">Fixed TTS, then hard listen</text>
+</g>
+
+<!-- Arrow S1 → S2 -->
+<line x1="340" y1="176" x2="340" y2="220" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="348" y="200" text-anchor="start" font-size="12" fill="#b4b2a9">ASR returns transcript</text>
+
+<!-- S2: NAME CAPTURE -->
+<g>
+  <rect x="190" y="220" width="300" height="56" rx="8" fill="#085041" stroke="#5dcaa5" stroke-width="0.5"/>
+  <text x="340" y="238" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#9fe1cb">S2: Name capture</text>
+  <text x="340" y="258" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5dcaa5">Extract name, confirm, ask need</text>
+</g>
+
+<!-- Arrow S2 → S3 -->
+<line x1="340" y1="276" x2="340" y2="320" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="348" y="300" text-anchor="start" font-size="12" fill="#b4b2a9">Caller states their need</text>
+
+<!-- S3: INTENT CAPTURE -->
+<g>
+  <rect x="190" y="320" width="300" height="56" rx="8" fill="#3c3489" stroke="#afa9ec" stroke-width="0.5"/>
+  <text x="340" y="338" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#cecbf6">S3: Intent capture</text>
+  <text x="340" y="358" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#afa9ec">LLM classifies into lane</text>
+</g>
+
+<!-- Confidence loop -->
+<path d="M490 348 Q540 348 540 310 Q540 275 490 275" fill="none" stroke="#afa9ec" stroke-width="0.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+<text x="548" y="312" text-anchor="start" font-size="12" fill="#afa9ec">Low confidence</text>
+<text x="548" y="326" text-anchor="start" font-size="12" fill="#afa9ec">→ fallback question</text>
+
+<!-- Lane arrows from S3 -->
+<path d="M280 376 L140 420" fill="none" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="80" y="400" text-anchor="start" font-size="12" fill="#f0997b">Lane A</text>
+
+<line x1="340" y1="376" x2="340" y2="420" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="348" y="400" text-anchor="start" font-size="12" fill="#f0997b">Lane B</text>
+
+<path d="M400 376 L540 420" fill="none" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="548" y="410" text-anchor="start" font-size="12" fill="#f0997b">Lane C</text>
+
+<!-- S4a: LANE A -->
+<g>
+  <rect x="40" y="420" width="200" height="56" rx="8" fill="#712b13" stroke="#f0997b" stroke-width="0.5"/>
+  <text x="140" y="438" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#f5c4b3">S4a: New service</text>
+  <text x="140" y="458" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#f0997b">Problem, address, urgency</text>
+</g>
+
+<!-- S4b: LANE B -->
+<g>
+  <rect x="240" y="420" width="200" height="56" rx="8" fill="#712b13" stroke="#f0997b" stroke-width="0.5"/>
+  <text x="340" y="438" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#f5c4b3">S4b: Schedule</text>
+  <text x="340" y="458" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#f0997b">Preferred window</text>
+</g>
+
+<!-- S4c: LANE C -->
+<g>
+  <rect x="440" y="420" width="200" height="56" rx="8" fill="#712b13" stroke="#f0997b" stroke-width="0.5"/>
+  <text x="540" y="438" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#f5c4b3">S4c: Follow-up</text>
+  <text x="540" y="458" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#f0997b">Match existing job</text>
+</g>
+
+<!-- Convergence to S5 -->
+<path d="M140 476 L140 520 L340 540" fill="none" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="340" y1="476" x2="340" y2="540" stroke="#888780" stroke-width="1.5"/>
+<path d="M540 476 L540 520 L342 540" fill="none" stroke="#888780" stroke-width="1.5"/>
+
+<!-- S5: CONTACT CAPTURE -->
+<g>
+  <rect x="190" y="540" width="300" height="56" rx="8" fill="#085041" stroke="#5dcaa5" stroke-width="0.5"/>
+  <text x="340" y="558" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#9fe1cb">S5: Contact capture</text>
+  <text x="340" y="578" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5dcaa5">Confirm ANI or alt number</text>
+</g>
+
+<!-- Arrow S5 → S6 -->
+<line x1="340" y1="596" x2="340" y2="640" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<!-- S6: READBACK -->
+<g>
+  <rect x="190" y="640" width="300" height="56" rx="8" fill="#3c3489" stroke="#afa9ec" stroke-width="0.5"/>
+  <text x="340" y="658" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#cecbf6">S6: Readback + confirm</text>
+  <text x="340" y="678" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#afa9ec">Repeat all details, ask Y/N</text>
+</g>
+
+<!-- Correction loop -->
+<path d="M490 668 Q550 668 550 620 Q550 570 490 570" fill="none" stroke="#afa9ec" stroke-width="0.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+<text x="558" y="620" text-anchor="start" font-size="12" fill="#afa9ec">Correction</text>
+<text x="558" y="634" text-anchor="start" font-size="12" fill="#afa9ec">→ re-capture</text>
+
+<!-- Arrow S6 → S7 -->
+<line x1="340" y1="696" x2="340" y2="740" stroke="#888780" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="348" y="720" text-anchor="start" font-size="12" fill="#b4b2a9">Confirmed</text>
+
+<!-- S7: CLOSE -->
+<g>
+  <rect x="220" y="740" width="240" height="56" rx="8" fill="#2c2c2a" stroke="#5f5e5a" stroke-width="0.5"/>
+  <text x="340" y="758" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#d3d1c7">S7: Close + log</text>
+  <text x="340" y="778" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#b4b2a9">Goodbye, write audit blob</text>
+</g>
+
+<!-- Timeout/frustration escape -->
+<path d="M40 320 L40 860 L340 860" fill="none" stroke="#E24B4A" stroke-width="0.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+<text x="48" y="580" text-anchor="start" font-size="12" fill="#E24B4A">Timeout or frustration</text>
+<text x="48" y="596" text-anchor="start" font-size="12" fill="#E24B4A">detected at any state</text>
+
+<!-- Escalation box -->
+<g>
+  <rect x="220" y="840" width="240" height="56" rx="8" fill="#791f1f" stroke="#f09595" stroke-width="0.5"/>
+  <text x="340" y="858" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#f7c1c1">Escalate</text>
+  <text x="340" y="878" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#f09595">Warm transfer or voicemail</text>
+</g>
+
+<!-- Legend -->
+<rect x="30" y="920" width="620" height="140" rx="8" fill="#1a1d23" stroke="#444441" stroke-width="0.5"/>
+<text x="50" y="948" font-size="14" font-weight="500" fill="#d3d1c7">Legend</text>
+<rect x="50" y="962" width="12" height="12" rx="2" fill="#085041" stroke="#5dcaa5" stroke-width="0.5"/>
+<text x="70" y="973" font-size="12" fill="#b4b2a9">Listen/capture states (speak → hard listen → transition)</text>
+<rect x="50" y="982" width="12" height="12" rx="2" fill="#3c3489" stroke="#afa9ec" stroke-width="0.5"/>
+<text x="70" y="993" font-size="12" fill="#b4b2a9">LLM processing states</text>
+<rect x="50" y="1002" width="12" height="12" rx="2" fill="#712b13" stroke="#f0997b" stroke-width="0.5"/>
+<text x="70" y="1013" font-size="12" fill="#b4b2a9">Lane-specific detail capture</text>
+<rect x="50" y="1022" width="12" height="12" rx="2" fill="#2c2c2a" stroke="#5f5e5a" stroke-width="0.5"/>
+<text x="70" y="1033" font-size="12" fill="#b4b2a9">Bookend states (entry/exit)</text>
+<rect x="350" y="962" width="12" height="12" rx="2" fill="#791f1f" stroke="#f09595" stroke-width="0.5"/>
+<text x="370" y="973" font-size="12" fill="#b4b2a9">Escape hatch (any state → escalate)</text>
+<line x1="350" y1="988" x2="380" y2="988" stroke="#afa9ec" stroke-width="0.5" stroke-dasharray="4 3"/>
+<text x="390" y="993" font-size="12" fill="#b4b2a9">Loop-back / correction path</text>
+</svg>

@@ -1,8 +1,9 @@
+import { clearStoredToken, getStoredToken, redirectToLogin } from './auth';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '/api/v1';
 
 export function getToken() {
-  if (typeof window === 'undefined') return '';
-  return localStorage.getItem('voiceops_token') || '';
+  return getStoredToken();
 }
 
 export async function api(path, options = {}) {
@@ -21,6 +22,11 @@ export async function api(path, options = {}) {
     headers,
     cache: 'no-store'
   });
+
+  if (response.status === 401) {
+    clearStoredToken();
+    redirectToLogin();
+  }
 
   if (!response.ok) {
     const text = await response.text();
