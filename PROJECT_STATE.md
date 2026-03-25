@@ -67,9 +67,29 @@
 - Postgres is stable under the manual bootstrap path and remains the canonical persistence layer.
 - Prometheus scraping is active for backend metrics.
 
-## Immediate Next Priorities
-1. Tune ASR silence handling, retry prompts, and turn timing using live call traces from `CALL_POLISH_LOG.md`.
-2. Improve outbound call field-collection flow and first-turn reliability.
-3. Add end-to-end call smoke-test automation and transcript validation.
-4. Integrate the dual-model stream consumer path with `minicpm-v` on top of existing Valkey streams.
-5. Move the frontend from `next dev` container runtime to a production build/start path when polish stabilizes.
+## Active Branch: fsm-build
+
+Phase 3 (FSM Pipeline) is **COMPLETE** on the `fsm-build` branch. All 84 tests pass. Feature flag `FSM_PIPELINE_ENABLED=false` keeps live calls unaffected. Main is not touched.
+
+### Phase 3 build order — ALL COMPLETE:
+1. `voice:calls:{session_id}` stream schema — **DONE** (`services/streams/event_schemas.py`, 38 tests)
+2. Stream Ingester — refactor to thin event emitter + 5-task startup — **DONE** (`services/realtime/stream_ingester.py`, 14 tests)
+3. State Controller — FSM S0→S7, hard-listen guarantee — **DONE** (`services/state_controller/controller.py`, 23 tests)
+4. ASR Consumer — event-driven ASRClient wrapper — **DONE** (`services/asr/consumer.py`)
+5. TTS Consumer — event-driven TTSClient wrapper + barge-in — **DONE** (`services/tts/consumer.py`)
+6. LLM Consumer — Phase 3 stub (NOT wired; State Controller calls AgentRuntime inline) — **DONE** (`services/llm/consumer.py`)
+7. Audit Consumer — per-call JSONL event log — **DONE** (`services/audit/consumer.py`)
+8. Inbound Workflow Builder — lane config, FSM config stub — **DONE** (visual editor deferred)
+9. Migration phases A→E (shadow → full cutover) — **PENDING**
+
+### Phase 4 (next):
+- Wire LLM Consumer task into `handle_ws()`; remove inline `generate_response()` from State Controller
+- Add `pending_transcript` field to `CallFSMState` so State Controller awaits `llm.extracted` before emitting TTS
+- Migration phases A→E: shadow mode (dual-write) → metric gate → cutover
+
+### Immediate Next Priorities
+1. Enable `FSM_PIPELINE_ENABLED=true` in staging and run shadow mode (A→B).
+2. Tune ASR silence handling, retry prompts, and turn timing using `fsm_events.jsonl` traces.
+3. Wire LLM Consumer into `handle_ws()` (Phase 4 LLM decoupling).
+4. Add end-to-end call smoke-test automation and transcript validation.
+5. Move frontend from `next dev` container to production build/start path.

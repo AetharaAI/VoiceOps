@@ -65,3 +65,4 @@ Instrumentator().instrument(app).expose(app, endpoint='/metrics')
 @app.on_event('startup')
 async def startup() -> None:
     logger.info('app.startup', extra={'correlation_id': '', 'tenant_id': ''})
+    settings.log_resolved()

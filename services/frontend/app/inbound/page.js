@@ -46,7 +46,8 @@ function formFromAgent(agent, voices, phoneNumbers) {
     tts_model_select: ttsModel,
     custom_tts_model: '',
     tts_voice_select: knownVoice ? ttsVoice : '__custom__',
-    custom_tts_voice: knownVoice ? '' : ttsVoice
+    custom_tts_voice: knownVoice ? '' : ttsVoice,
+    fsm_config: JSON.stringify(builder.fsm_config || {}, null, 2)
   };
 }
 
@@ -82,7 +83,10 @@ function buildAgentPayload(form) {
         business_context: form.persona.trim(),
         goal: form.script.trim(),
         action_config: actionConfig,
-        crm_mapping: crmMapping
+        crm_mapping: crmMapping,
+        // fsm_config is persisted as-is; the State Controller reads it at call start.
+        // An empty object is valid — defaults apply.
+        fsm_config: parseJsonObject('FSM Config JSON', form.fsm_config)
       }
     }
   };
@@ -97,6 +101,7 @@ export default function InboundPage() {
   const [editingAgentId, setEditingAgentId] = useState('');
   const [form, setForm] = useState(defaultInboundForm());
   const [message, setMessage] = useState('');
+  const [fsmConfigOpen, setFsmConfigOpen] = useState(false);
 
   useEffect(() => {
     load();
@@ -323,7 +328,40 @@ export default function InboundPage() {
             <label>CRM Mapping JSON</label>
             <textarea value={form.crm_mapping} onChange={(e) => setForm({ ...form, crm_mapping: e.target.value })} />
 
-            <button type="submit">{editingAgentId ? 'Save Inbound Workflow' : 'Create Inbound Workflow'}</button>
+            {/* FUTURE: Visual FSM configurator — lane editor, field editor, timeout sliders,
+                greeting per-state. See FSM/voiceops_inbound_state_machine.svg for reference. */}
+            <div style={{ marginTop: 16, borderTop: '1px solid #e0e0e0', paddingTop: 12 }}>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: '100%', textAlign: 'left', fontWeight: 500 }}
+                onClick={() => setFsmConfigOpen((open) => !open)}
+              >
+                {fsmConfigOpen ? '▾' : '▸'} Call flow configuration (advanced)
+              </button>
+              {fsmConfigOpen && (
+                <div style={{ marginTop: 10 }}>
+                  <p style={{ fontSize: 13, color: '#555', marginBottom: 8 }}>
+                    FSM config is persisted with the workflow and read by the State Controller at call start.
+                    Visual lane editor coming soon.
+                  </p>
+                  <pre style={{
+                    background: '#f5f5f5',
+                    border: '1px solid #ddd',
+                    borderRadius: 4,
+                    padding: 10,
+                    fontSize: 12,
+                    overflowX: 'auto',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word'
+                  }}>
+                    {form.fsm_config || '{}'}
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            <button type="submit" style={{ marginTop: 16 }}>{editingAgentId ? 'Save Inbound Workflow' : 'Create Inbound Workflow'}</button>
           </form>
         </section>
 

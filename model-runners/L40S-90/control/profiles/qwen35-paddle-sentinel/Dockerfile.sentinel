@@ -1,0 +1,5 @@
+FROM vllm/vllm-openai:nightly-36735fd77224467e6580f3bd48eb32d4fca8c72e
+
+# Same pinned nightly as Voice-X Voxtral. Sentinel is a Voxtral fine-tune
+# so it needs the same Mistral tokenizer/loader support.
+RUN python3 -m pip install --no-cache-dir soundfile librosa

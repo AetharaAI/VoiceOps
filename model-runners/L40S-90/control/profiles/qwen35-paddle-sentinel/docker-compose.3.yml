@@ -1,0 +1,146 @@
+networks:
+  aether-ops:
+    external: true
+
+services:
+  qwen3.5-35b:
+    image: vllm/vllm-openai:nightly
+    container_name: qwen3.5-35b
+    runtime: nvidia
+    networks:
+      - aether-ops
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    depends_on:
+      sentinel-4b:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+      HF_HOME: /cache
+      HF_HUB_CACHE: /cache/.hf-cache
+    volumes:
+      - /mnt/aetherpro_old/models:/models
+      - /mnt/aetherpro/cache:/cache
+      - ./logs/qwen3.5-35b:/logs
+    ports:
+      - "8101:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -H 'Authorization: Bearer EMPTY' http://localhost:8000/v1/models >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    command: >
+      /models/cyankiwi/Qwen3.5-35B-A3B-AWQ-4bit
+      --trust-remote-code
+      --served-model-name qwen3.5-35b
+      --host 0.0.0.0
+      --port 8000
+      --dtype auto
+      --kv-cache-dtype fp8
+      --gpu-memory-utilization 0.67
+      --max-model-len 32768
+      --max-num-seqs 3
+      --max-num-batched-tokens 8192
+      --reasoning-parser qwen3
+      --default-chat-template-kwargs '{"enable_thinking": false}'
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --enforce-eager
+      --enable-prefix-caching
+      --enable-chunked-prefill
+      --generation-config vllm
+      --api-key EMPTY
+    restart: unless-stopped
+
+  sentinel-4b:
+    build:
+      context: .
+      dockerfile: Dockerfile.sentinel
+    container_name: sentinel-4b
+    runtime: nvidia
+    networks:
+      - aether-ops
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    depends_on:
+      paddle-ocr:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      VLLM_WORKER_MULTIPROC_METHOD: spawn
+      HF_HOME: /cache
+      HF_HUB_CACHE: /cache/.hf-cache
+    volumes:
+      - /mnt/aetherpro/models:/models
+      - /mnt/aetherpro/cache:/cache
+      - ./logs/sentinel-4b:/logs
+    ports:
+      - "8104:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -H 'Authorization: Bearer EMPTY' http://localhost:8000/v1/models >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 45s
+    command: >
+      /models/voice/trishtan/voxtral-sentinel-4b
+      --served-model-name sentinel-4b
+      --host 0.0.0.0
+      --port 8000
+      --trust-remote-code
+      --tokenizer-mode mistral
+      --config-format mistral
+      --load-format mistral
+      --dtype auto
+      --gpu-memory-utilization 0.17
+      --max-model-len 4096
+      --max-num-seqs 2
+      --max-num-batched-tokens 4096
+      --enforce-eager
+      --generation-config vllm
+      --api-key EMPTY
+    restart: unless-stopped
+
+  paddle-ocr:
+    build:
+      context: .
+      dockerfile: Dockerfile.paddle-ocr
+    container_name: paddle-ocr
+    runtime: nvidia
+    networks:
+      - aether-ops
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+    volumes:
+      - /mnt/aetherpro/models:/models
+      - /mnt/aetherpro/cache:/cache
+      - ./logs/paddle-ocr:/logs
+    ports:
+      - "8102:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/v1/models >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    command: >
+      paddleocr genai_server
+      --model_name paddle-ocr
+      --model_path /models/vision/PaddlePaddle/PaddleOCR-VL-1.5
+      --host 0.0.0.0
+      --port 8000
+      --backend vllm
+    restart: unless-stopped

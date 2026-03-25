@@ -1,0 +1,5 @@
+FROM ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-genai-vllm-server:latest-nvidia-gpu
+
+# PaddleOCR's official image bundles PaddlePaddle + vLLM server.
+# Serves OpenAI-compatible /v1 endpoint.
+# No additional deps needed.

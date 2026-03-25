@@ -1,5 +1,66 @@
 # Changelog
 
+## 2026-03-25 — fsm-build branch (Phase 3 consumers complete)
+
+### Phase 3 — FSM Pipeline: All Consumers Built
+
+All five components of the FSM pipeline are now implemented, tested (84 tests pass), and wired into `stream_ingester.handle_ws()`:
+
+| Component | File | Tests |
+|---|---|---|
+| StreamIngester | `app/services/realtime/stream_ingester.py` | `test_stream_ingester.py` (14) |
+| StreamPublisher | `app/services/streams/publisher.py` | `test_stream_event_schemas.py` (38) |
+| StateController | `app/services/state_controller/controller.py` | `test_state_controller.py` (23) |
+| ASR Consumer | `app/services/asr/consumer.py` | (smoke: covered by ingester tests) |
+| TTS Consumer | `app/services/tts/consumer.py` | (smoke: covered by ingester tests) |
+| LLM Consumer | `app/services/llm/consumer.py` | `test_fsm_consumers.py` (4) |
+| Audit Consumer | `app/services/audit/consumer.py` | `test_fsm_consumers.py` (5) |
+
+**Hard-listen guarantee is enforced in StateController:**
+- `_emit_tts()` is a no-op if `asr_listening=True` (logged as warning)
+- `_emit_asr_start_listen()` is a no-op if `pending_tts_id` is set
+- Both guards are unit-tested in `test_state_controller.py`
+
+**Phase 3 LLM path (inline):**
+The State Controller calls `AgentRuntime.generate_response()` inline and publishes `llm.extract`+`llm.extracted` to the stream for observability. The LLM Consumer is written but NOT wired into `handle_ws()` in Phase 3. Phase 4: start LLM Consumer task + remove inline path from State Controller.
+
+**Each call starts 5 asyncio tasks:**
+1. `tts_drain` — forwards μ-law audio from `tts_audio_queue` to Twilio media events
+2. `state_ctrl` — FSM driver (S0→S7), emits `tts.speak` / `asr.start_listen`
+3. `asr_consumer` — listens for `asr.start_listen`, drains audio queue, publishes `asr.transcript`
+4. `tts_consumer` — listens for `tts.speak`, streams TTS audio, publishes `tts.complete`
+5. `audit_consumer` — reads all events, writes per-call `fsm_events.jsonl`
+
+**Feature flag still off by default:** `FSM_PIPELINE_ENABLED=false` — live calls are unaffected.
+
+---
+
+## 2026-03-25 — fsm-build branch
+
+### Phase 2 Addendum (pre-Phase-3 gates)
+
+**Addition 1 — Config & secrets hygiene (BLOCKING gate, now clear):**
+- Refactored `services/backend/app/core/config.py` into a fully grouped `Settings` class with logical sections: App, Database, Redis, Twilio, Aether Voice, LLM, Telemetry.
+- All fields have sensible defaults. `extra='ignore'` set — unknown `.env` vars are silently dropped.
+- Added new FSM Redis settings: `redis_call_stream_prefix`, `redis_call_state_hash_prefix`, `redis_stream_maxlen`, and five consumer group name fields (`redis_cg_state_controller`, `redis_cg_asr`, `redis_cg_tts`, `redis_cg_llm`, `redis_cg_audit`).
+- Added `Settings.log_resolved()` — logs all resolved settings at startup with secret redaction (first 4 chars + `****`). Called from `app.on_event('startup')` in `main.py`.
+- Added `Settings.per_call_stream_key(session_id)` and `per_call_state_key(session_id)` helpers for FSM key construction.
+- Confirmed zero `os.getenv()` / `os.environ` calls outside `config.py`.
+- Rewrote `.env.example` — fully grouped, commented, includes all new FSM vars.
+
+**Addition 2 — FSM Configurator stub (non-blocking, done):**
+- Added `fsm_config` field to the Inbound Workflow Builder form (frontend).
+- `buildAgentPayload` now persists `fsm_config` inside `workflow_dsl.inbound_builder.fsm_config`.
+- `formFromAgent` reads it back on edit load.
+- Added collapsed "Call flow configuration (advanced)" section in the builder UI — shows `fsm_config` as a read-only code block when expanded.
+- Added `// FUTURE` comment block pointing to `FSM/voiceops_inbound_state_machine.svg`.
+
+**Addition 3 — Stream event schema contract (BLOCKING gate, now clear):**
+- Created `services/backend/app/services/streams/` package.
+- Created `event_schemas.py` — Pydantic models for all 15 FSM event types on `voice:calls:{session_id}`.
+- Includes: `FSMEventBase` envelope, typed payload models per event, typed event wrappers with `Literal` discriminators, `AnyFSMEvent` union for deserialization dispatch, `make_event()` factory helper.
+- Exports `ALL_EVENT_TYPES`, `STATE_CONTROLLER_COMMANDS`, `STATE_CONTROLLER_TRIGGERS` frozensets for consumer filtering.
+
 ## 2026-03-17
 - Fixed Twilio `connected` media stream event handling in the live WebSocket dispatcher.
 - Fixed Twilio `mark` media stream event handling in the live WebSocket dispatcher.

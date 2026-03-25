@@ -11,6 +11,7 @@ from app.core.metrics import CALLS_STARTED
 from app.db.session import get_db
 from app.models.models import Call, CallDirection, CallStatus
 from app.services.realtime.session_manager import session_manager
+from app.services.realtime.stream_ingester import stream_ingester
 from app.services.telephony.event_sink import call_event_sink
 from app.services.telephony.inbound_routing import build_inbound_webhook_payload, resolve_inbound_agent
 from app.services.telephony.telemetry import utc_now_iso
@@ -404,4 +405,7 @@ async def call_status(
 
 @router.websocket('/ws/telephony/{call_id}')
 async def telephony_ws(websocket: WebSocket, call_id: str, db: AsyncSession = Depends(get_db)) -> None:
-    await session_manager.handle_ws(websocket, call_id, db)
+    if get_settings().fsm_pipeline_enabled:
+        await stream_ingester.handle_ws(websocket, call_id, db)
+    else:
+        await session_manager.handle_ws(websocket, call_id, db)
