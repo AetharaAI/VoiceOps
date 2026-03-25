@@ -17,3 +17,8 @@ logs/*.md
 logs/*.json
 logs/*.jsonl
 test-calls-logs/
+
+# runtime logs
+services/backend/logs/
+*.log
+*.jsonl
