@@ -219,6 +219,7 @@ class TTSConsumer:
         logger.info('tts_consumer.speak.start', extra={
             'correlation_id': '', 'tenant_id': tenant_id,
             'call_id': call_id, 'tts_request_id': tts_request_id,
+            'tts_voice': voice, 'tts_model': model,
             'text_preview': text[:80],
         })
 

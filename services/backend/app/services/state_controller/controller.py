@@ -369,7 +369,7 @@ class StateController:
         agent_turn = await self._runtime.generate_response(
             agent=state.agent,
             user_text=text,
-            context=(state.agent.context_payload or {}),
+            context={},
             collected_fields=state.collected_fields,
             prompted_field=state.last_prompted_field,
             telemetry_context={
@@ -623,6 +623,7 @@ class StateController:
             'correlation_id': '', 'tenant_id': state.tenant_id,
             'call_id': state.call_id, 'fsm_state': state.current_state,
             'tts_request_id': tts_payload.tts_request_id,
+            'tts_voice': voice, 'tts_model': model,
             'text_preview': text[:80], 'response_source': response_source,
         })
 
