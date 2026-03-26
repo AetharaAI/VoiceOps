@@ -238,7 +238,8 @@ def test_speech_resets_silence_counter_during_asr():
 # ---------------------------------------------------------------------------
 
 def test_barge_in_sends_clear_and_sets_flag():
-    """When caller speaks during TTS, barge-in clears Twilio buffer."""
+    """Barge-in fires after MIN_BARGE_IN_FRAMES consecutive voiced frames during TTS."""
+    from app.services.realtime.stream_ingester import MIN_BARGE_IN_FRAMES
     ingester = StreamIngester()
     session = _make_session()
     session.stream_sid = 'MZ_test_stream_sid'
@@ -249,12 +250,18 @@ def test_barge_in_sends_clear_and_sets_flag():
         session.asr_active = False
         session.vad._speech = True
 
+        # Send MIN_BARGE_IN_FRAMES - 1 frames — should NOT fire yet
+        for _ in range(MIN_BARGE_IN_FRAMES - 1):
+            result = await ingester._process_audio_frame(session, ws, _silence_frame())
+            assert result is None
+            assert session.barge_in_requested is False
+
+        # One more frame hits the threshold — fires
         result = await ingester._process_audio_frame(session, ws, _silence_frame())
         assert result is not None
         assert result['type'] == 'barge_in'
         assert session.barge_in_requested is True
 
-        # Should have sent a clear event to Twilio
         clear_events = [e for e in ws.sent if e.get('event') == 'clear']
         assert len(clear_events) == 1
         assert clear_events[0]['streamSid'] == 'MZ_test_stream_sid'
@@ -263,7 +270,8 @@ def test_barge_in_sends_clear_and_sets_flag():
 
 
 def test_barge_in_only_fires_once():
-    """Second speech frame during TTS does not send another clear."""
+    """Subsequent speech frames after barge-in do not send another clear."""
+    from app.services.realtime.stream_ingester import MIN_BARGE_IN_FRAMES
     ingester = StreamIngester()
     session = _make_session()
     session.stream_sid = 'MZ_test'
@@ -274,6 +282,11 @@ def test_barge_in_only_fires_once():
         session.asr_active = False
         session.vad._speech = True
 
+        # Trigger barge-in
+        for _ in range(MIN_BARGE_IN_FRAMES):
+            await ingester._process_audio_frame(session, ws, _silence_frame())
+
+        # Extra frames — should not add more clear events
         await ingester._process_audio_frame(session, ws, _silence_frame())
         await ingester._process_audio_frame(session, ws, _silence_frame())
 

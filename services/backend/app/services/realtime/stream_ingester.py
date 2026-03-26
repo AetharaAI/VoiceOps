@@ -88,6 +88,7 @@ TWILIO_SAMPLE_RATE = 8000
 ASR_SAMPLE_RATE = 16000
 MIN_SPEECH_FRAMES = 2
 END_OF_TURN_SILENCE_FRAMES = 30
+MIN_BARGE_IN_FRAMES = 4   # consecutive voiced frames required to trigger barge-in
 TTS_MEDIA_CHUNK_BYTES = 640
 RECENT_FRAME_BUFFER = 10
 
@@ -137,6 +138,10 @@ class IngesterSession:
 
     # Barge-in: set by Ingester when caller speaks during TTS
     barge_in_requested: bool = False
+    barge_in_voiced_frames: int = 0   # debounce counter
+
+    # Stash for call.incoming payload — published when stream_sid is set, not before
+    _call_incoming_payload: Any = field(default=None)
 
     # Telemetry
     call_started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -206,6 +211,7 @@ class StreamIngester:
                 # TTS complete for this request — stay alive for next
                 session.tts_active = False
                 session.barge_in_requested = False
+                session.barge_in_voiced_frames = 0
                 continue
             if not session.stream_sid:
                 continue
@@ -244,17 +250,25 @@ class StreamIngester:
             pcm_frame_8k = mulaw_to_pcm16(frame_mulaw)
             is_speech = session.vad.is_speech(pcm_frame_8k, TWILIO_SAMPLE_RATE)
 
-            # Barge-in: caller speaks while TTS is active
-            if is_speech and session.tts_active and not session.barge_in_requested:
-                session.barge_in_requested = True
-                if session.stream_sid:
-                    await self._send_to_twilio(
-                        websocket, session,
-                        {'event': 'clear', 'streamSid': session.stream_sid},
-                    )
-                session.vad_speech_events += 1
-                vad_event = {'type': 'barge_in', 'timestamp_ms': int(time.time() * 1000)}
-                continue
+            # Barge-in: caller speaks while TTS is active (debounced).
+            # While TTS is active we skip normal speech/ASR detection entirely —
+            # only count toward barge-in threshold.
+            if session.tts_active and not session.barge_in_requested:
+                if is_speech:
+                    session.barge_in_voiced_frames += 1
+                else:
+                    session.barge_in_voiced_frames = 0
+                if session.barge_in_voiced_frames >= MIN_BARGE_IN_FRAMES:
+                    session.barge_in_requested = True
+                    session.barge_in_voiced_frames = 0
+                    if session.stream_sid:
+                        await self._send_to_twilio(
+                            websocket, session,
+                            {'event': 'clear', 'streamSid': session.stream_sid},
+                        )
+                    session.vad_speech_events += 1
+                    vad_event = {'type': 'barge_in', 'timestamp_ms': int(time.time() * 1000)}
+                continue  # always skip ASR detection while TTS is playing
 
             if not session.asr_active:
                 # Accumulate pre-speech buffer for look-back
@@ -361,23 +375,21 @@ class StreamIngester:
         telephony_context = (call.context_payload or {}).get('telephony', {})
         agent_config_snapshot = (agent.policy_config or {}).get('runtime', {})
 
-        # Emit call.incoming to the per-call stream
-        if publisher is not None:
-            await publisher.publish(make_event(
-                CallIncomingEvent,
-                session_id=session_id,
-                call_id=call_id,
-                payload=CallIncomingPayload(
-                    from_number=call.from_number,
-                    to_number=call.to_number,
-                    call_sid=call.external_call_id or '',
-                    agent_id=str(agent.id),
-                    tenant_id=str(call.tenant_id),
-                    resolution_source=(telephony_context.get('resolver') or {}).get('source', 'unknown'),
-                    agent_config_snapshot=agent_config_snapshot,
-                    correlation_id=(telephony_context.get('webhook') or {}).get('correlation_id', ''),
-                ),
-            ))
+        # call.incoming is published inside _event_loop() when Twilio sends the 'start'
+        # event (i.e. stream_sid is set).  Publishing it here (before stream_sid is known)
+        # caused the State Controller to emit tts.speak before stream_sid was available,
+        # so every audio chunk was silently dropped by _drain_tts_audio.
+        # We stash the payload on the session so _event_loop can use it.
+        session._call_incoming_payload = CallIncomingPayload(
+            from_number=call.from_number,
+            to_number=call.to_number,
+            call_sid=call.external_call_id or '',
+            agent_id=str(agent.id),
+            tenant_id=str(call.tenant_id),
+            resolution_source=(telephony_context.get('resolver') or {}).get('source', 'unknown'),
+            agent_config_snapshot=agent_config_snapshot,
+            correlation_id=(telephony_context.get('webhook') or {}).get('correlation_id', ''),
+        )
 
         logger.info('ingester.session.started', extra={
             'correlation_id': '',
@@ -576,10 +588,16 @@ class StreamIngester:
                     'correlation_id': '', 'tenant_id': session.tenant_id,
                     'call_id': session.call_id, 'stream_sid': session.stream_sid or '',
                 })
-                # State Controller picks up call.incoming (already published) and will
-                # emit tts.speak for the greeting once it sees the stream is ready.
-                # For Phase 3 migration: if no State Controller is wired, we continue
-                # without the greeting. The greeting will be handled by the State Controller.
+                # NOW publish call.incoming — stream_sid is set so TTS audio will not
+                # be dropped by the drain task.  State Controller reads this event and
+                # transitions S0→S1, which triggers the greeting tts.speak.
+                if publisher is not None and hasattr(session, '_call_incoming_payload'):
+                    await publisher.publish(make_event(
+                        CallIncomingEvent,
+                        session_id=session.session_id,
+                        call_id=session.call_id,
+                        payload=session._call_incoming_payload,
+                    ))
                 continue
 
             if event_type == 'media':
