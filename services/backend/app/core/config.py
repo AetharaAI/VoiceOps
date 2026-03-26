@@ -118,6 +118,7 @@ class TwilioSettings(BaseSettings):
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
     twilio_from_number: str | None = None
+    twilio_inbound_answer_delay_seconds: float = 0.0
 
 
 class VoiceSettings(BaseSettings):
@@ -220,6 +221,7 @@ class Settings(BaseSettings):
     twilio_account_sid: str | None = None
     twilio_auth_token: str | None = None
     twilio_from_number: str | None = None
+    twilio_inbound_answer_delay_seconds: float = 0.0
 
     # --- Aether Voice (ASR + TTS) ---
     aether_voice_http_base: str = 'https://asr.aetherpro.us/api'

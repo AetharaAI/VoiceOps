@@ -7,7 +7,10 @@ import httpx
 import websockets
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.services.realtime.audio import strip_control_markup
+
+logger = get_logger(__name__)
 
 
 class TTSStreamError(RuntimeError):
@@ -80,6 +83,19 @@ class TTSClient:
             'context_mode': 'conversation',
             'metadata': self._merge_metadata(base_metadata, metadata),
         }
+        logger.info(
+            'tts_client.stream_tts.start',
+            extra={
+                'correlation_id': '',
+                'tenant_id': '',
+                'call_id': call_id,
+                'agent_id': agent_id,
+                'tts_provider': resolved_provider,
+                'tts_model': payload['model'],
+                'tts_voice': payload['voice'],
+                'text_chars': len(cleaned_text),
+            },
+        )
         response = await self.http.post(
             f"{self.settings.aether_voice_http_base.rstrip('/')}/v1/tts/stream/start",
             json=payload,

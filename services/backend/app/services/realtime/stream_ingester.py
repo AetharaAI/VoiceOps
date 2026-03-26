@@ -224,6 +224,10 @@ class StreamIngester:
                 session.tts_audio_started = True
                 # Start grace window from first outbound audio, not from tts_active flip.
                 session.barge_in_grace_until = time.monotonic() + BARGE_IN_GRACE_SECONDS
+                logger.info('ingester.tts.first_audio_sent', extra={
+                    'correlation_id': '', 'tenant_id': session.tenant_id,
+                    'call_id': session.call_id, 'stream_sid': session.stream_sid or '',
+                })
             for offset in range(0, len(chunk), TTS_MEDIA_CHUNK_BYTES):
                 sub = chunk[offset: offset + TTS_MEDIA_CHUNK_BYTES]
                 await self._send_to_twilio(

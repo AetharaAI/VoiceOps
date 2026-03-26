@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, WebSocket
@@ -228,6 +229,20 @@ async def inbound_call(
         ws_base = 'wss://' + base
     ws_url = f"{ws_base}/api/v1/ws/telephony/{chosen_call.id}"
     await db.commit()
+
+    answer_delay_s = max(0.0, float(get_settings().twilio_inbound_answer_delay_seconds or 0.0))
+    if answer_delay_s > 0:
+        logger.info(
+            'telephony.inbound.webhook.answer_delay',
+            extra={
+                'correlation_id': correlation_id,
+                'tenant_id': str(chosen_call.tenant_id),
+                'call_id': str(chosen_call.id),
+                'call_sid': payload.call_sid,
+                'delay_seconds': answer_delay_s,
+            },
+        )
+        await asyncio.sleep(answer_delay_s)
 
     logger.info(
         'telephony.inbound.webhook.twiml_issued',
