@@ -248,6 +248,7 @@ def test_barge_in_sends_clear_and_sets_flag():
 
     async def run():
         session.tts_active = True
+        session.tts_audio_started = True
         session.asr_active = False
         session.vad._speech = True
         # Bypass grace period so we're testing debounce logic directly
@@ -283,6 +284,7 @@ def test_barge_in_only_fires_once():
 
     async def run():
         session.tts_active = True
+        session.tts_audio_started = True
         session.asr_active = False
         session.vad._speech = True
         # Bypass grace period so we're testing debounce logic directly
@@ -313,18 +315,17 @@ def test_barge_in_grace_period_blocks_early_trigger():
 
     async def run():
         session.tts_active = True
+        session.tts_audio_started = True
         session.asr_active = False
         session.vad._speech = True
-        # Grace period is active (default: barge_in_grace_until == 0.0 → will be set on first frame)
+        # Grace period is active.
+        session.barge_in_grace_until = _time.monotonic() + BARGE_IN_GRACE_SECONDS
 
         # Send well above MIN_BARGE_IN_FRAMES — should NOT fire while in grace period
         for _ in range(MIN_BARGE_IN_FRAMES + 5):
             result = await ingester._process_audio_frame(session, ws, _silence_frame())
             assert result is None
             assert session.barge_in_requested is False
-
-        # Grace period deadline should now be set
-        assert session.barge_in_grace_until > 0.0
 
         clear_events = [e for e in ws.sent if e.get('event') == 'clear']
         assert len(clear_events) == 0  # no barge-in during grace period
@@ -347,6 +348,32 @@ def test_no_barge_in_without_tts_active():
         result = await ingester._process_audio_frame(session, ws, _silence_frame())
         # First frame hits MIN_SPEECH_FRAMES=2 threshold — returns speech_started
         # after 2 frames, not barge_in
+        assert session.barge_in_requested is False
+        clear_events = [e for e in ws.sent if e.get('event') == 'clear']
+        assert len(clear_events) == 0
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+
+def test_no_barge_in_before_first_tts_audio():
+    """Barge-in cannot fire before any outbound TTS media has been sent."""
+    import time as _time
+    from app.services.realtime.stream_ingester import MIN_BARGE_IN_FRAMES
+    ingester = StreamIngester()
+    session = _make_session()
+    session.stream_sid = 'MZ_test'
+    ws = _FakeWebSocket()
+
+    async def run():
+        session.tts_active = True
+        session.tts_audio_started = False
+        session.asr_active = False
+        session.vad._speech = True
+        session.barge_in_grace_until = _time.monotonic() - 1.0
+
+        for _ in range(MIN_BARGE_IN_FRAMES + 2):
+            await ingester._process_audio_frame(session, ws, _silence_frame())
+
         assert session.barge_in_requested is False
         clear_events = [e for e in ws.sent if e.get('event') == 'clear']
         assert len(clear_events) == 0
@@ -425,6 +452,7 @@ def test_ingester_session_defaults():
     assert session.stream_sid is None
     assert session.asr_active is False
     assert session.tts_active is False
+    assert session.tts_audio_started is False
     assert session.barge_in_requested is False
     assert session.frames_received == 0
     assert session.vad_speech_events == 0

@@ -136,6 +136,7 @@ class IngesterSession:
     # State flags — written by consumers, read by Ingester
     asr_active: bool = False   # True = ASR Consumer has an open stream → send audio
     tts_active: bool = False   # True = TTS Consumer is playing audio
+    tts_audio_started: bool = False  # True after first outbound TTS media frame is sent
 
     # Barge-in: set by Ingester when caller speaks during TTS
     barge_in_requested: bool = False
@@ -212,12 +213,17 @@ class StreamIngester:
             if chunk is None:
                 # TTS complete for this request — stay alive for next
                 session.tts_active = False
+                session.tts_audio_started = False
                 session.barge_in_requested = False
                 session.barge_in_voiced_frames = 0
                 session.barge_in_grace_until = 0.0  # reset for next TTS utterance
                 continue
             if not session.stream_sid:
                 continue
+            if not session.tts_audio_started:
+                session.tts_audio_started = True
+                # Start grace window from first outbound audio, not from tts_active flip.
+                session.barge_in_grace_until = time.monotonic() + BARGE_IN_GRACE_SECONDS
             for offset in range(0, len(chunk), TTS_MEDIA_CHUNK_BYTES):
                 sub = chunk[offset: offset + TTS_MEDIA_CHUNK_BYTES]
                 await self._send_to_twilio(
@@ -256,12 +262,8 @@ class StreamIngester:
             # Barge-in: caller speaks while TTS is active (debounced).
             # While TTS is active we skip normal speech/ASR detection entirely —
             # only count toward barge-in threshold.
-            if session.tts_active and not session.barge_in_requested:
+            if session.tts_active and session.tts_audio_started and not session.barge_in_requested:
                 now = time.monotonic()
-                # Grace period: ignore barge-in at TTS start to avoid PSTN echo triggering it.
-                # Set the deadline on the first frame where tts_active is True.
-                if session.barge_in_grace_until == 0.0:
-                    session.barge_in_grace_until = now + BARGE_IN_GRACE_SECONDS
                 if now >= session.barge_in_grace_until:
                     if is_speech:
                         session.barge_in_voiced_frames += 1
