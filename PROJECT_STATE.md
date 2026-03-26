@@ -14,6 +14,10 @@
   - all required fields captured
   - zero anomalies
 - The system is now in `functional-with-polish-remaining` state rather than `plumbing incomplete`.
+- New known-good FSM call baseline captured on `2026-03-26` in `logs/working-logs-huge-win-0.4.md`:
+  - Voice selection remained consistent end-to-end (`bf_isabella`, `kokoro_realtime`)
+  - Conversation reached intelligent multi-turn behavior with field capture
+  - Remaining polish issue observed: premature silence recovery prompts and occasional choppy truncation
 
 ## Deployment Mode (Current)
 - Runtime: Docker Compose (`docker-compose.yml`) on CPU gateway node.
@@ -52,7 +56,7 @@
 - Frontend currently runs `next dev` in container for speed of iteration; production hardening should move this to build/start mode.
 - Manual DB migration path is authoritative until migration pipeline is reintroduced safely.
 - Call flow is functional but still needs polish:
-  - ASR silence detection and retry tuning still need refinement
+  - ASR silence detection and retry timing still need refinement under real PSTN pauses
   - outbound field-collection flow still needs cleanup against real-call behavior
   - dual-model stream consumer integration is not implemented yet
 - Reverse proxy assumptions matter:
@@ -89,7 +93,10 @@ Phase 3 (FSM Pipeline) is **COMPLETE** on the `fsm-build` branch. All 84 tests p
 
 ### Immediate Next Priorities
 1. Enable `FSM_PIPELINE_ENABLED=true` in staging and run shadow mode (A→B).
-2. Tune ASR silence handling, retry prompts, and turn timing using `fsm_events.jsonl` traces.
+2. Validate `2026-03-26` timing tune in live calls:
+   - `silence_timeout_seconds` increased `8.0 -> 10.0`
+   - end-of-turn silence threshold increased `30 -> 40` frames in both FSM + legacy paths
+   - live LLM phone prompt tightened to reduce filler/chuckle-like outputs and trailing fragments
 3. Wire LLM Consumer into `handle_ws()` (Phase 4 LLM decoupling).
 4. Add end-to-end call smoke-test automation and transcript validation.
 5. Move frontend from `next dev` container to production build/start path.

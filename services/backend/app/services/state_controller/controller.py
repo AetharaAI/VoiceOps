@@ -122,7 +122,7 @@ class CallFSMState:
 
     # Silence timeout — monotonic timestamp when we should fire timeout.silence
     silence_deadline: float | None = None
-    silence_timeout_seconds: float = 8.0
+    silence_timeout_seconds: float = 10.0
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-03-26 — fsm-build branch (live call polish pass)
+
+- Established new known-good baseline from `logs/working-logs-huge-win-0.4.md` (call id `0d03c5d4-bc7a-4b84-9e58-f56fede68fb2`):
+  - voice/model stayed consistent through full TTS path (`bf_isabella` + `kokoro_realtime`)
+  - FSM call loop remained stable with successful multi-turn intake
+- Tuned silence timing to reduce premature "trouble hearing you" recovery prompts:
+  - `services/backend/app/services/state_controller/controller.py`
+    - `silence_timeout_seconds` changed from `8.0` to `10.0`
+  - `services/backend/app/services/realtime/stream_ingester.py`
+    - `END_OF_TURN_SILENCE_FRAMES` changed from `30` to `40`
+  - `services/backend/app/services/realtime/session_manager.py`
+    - `END_OF_TURN_SILENCE_FRAMES` changed from `30` to `40` (kept legacy path aligned)
+- Tightened live-phone LLM speaking style constraints to reduce filler/chuckle artifacts and trailing fragments:
+  - `services/backend/app/services/agent_runtime/runtime.py` (`build_llm_system_prompt`)
+  - Added explicit instructions: no chuckles/stage directions/sound effects, avoid filler words, avoid trailing ellipses, keep responses short.
+- Verification:
+  - `cd services/backend && pytest -q tests/test_state_controller.py tests/test_fsm_consumers.py tests/test_stream_ingester.py`
+  - Result: `48 passed`
+
 ## 2026-03-25 — fsm-build branch (Phase 3 consumers complete)
 
 ### Phase 3 — FSM Pipeline: All Consumers Built
