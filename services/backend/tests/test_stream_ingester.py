@@ -239,6 +239,7 @@ def test_speech_resets_silence_counter_during_asr():
 
 def test_barge_in_sends_clear_and_sets_flag():
     """Barge-in fires after MIN_BARGE_IN_FRAMES consecutive voiced frames during TTS."""
+    import time as _time
     from app.services.realtime.stream_ingester import MIN_BARGE_IN_FRAMES
     ingester = StreamIngester()
     session = _make_session()
@@ -249,6 +250,8 @@ def test_barge_in_sends_clear_and_sets_flag():
         session.tts_active = True
         session.asr_active = False
         session.vad._speech = True
+        # Bypass grace period so we're testing debounce logic directly
+        session.barge_in_grace_until = _time.monotonic() - 1.0
 
         # Send MIN_BARGE_IN_FRAMES - 1 frames — should NOT fire yet
         for _ in range(MIN_BARGE_IN_FRAMES - 1):
@@ -271,6 +274,7 @@ def test_barge_in_sends_clear_and_sets_flag():
 
 def test_barge_in_only_fires_once():
     """Subsequent speech frames after barge-in do not send another clear."""
+    import time as _time
     from app.services.realtime.stream_ingester import MIN_BARGE_IN_FRAMES
     ingester = StreamIngester()
     session = _make_session()
@@ -281,6 +285,8 @@ def test_barge_in_only_fires_once():
         session.tts_active = True
         session.asr_active = False
         session.vad._speech = True
+        # Bypass grace period so we're testing debounce logic directly
+        session.barge_in_grace_until = _time.monotonic() - 1.0
 
         # Trigger barge-in
         for _ in range(MIN_BARGE_IN_FRAMES):
@@ -292,6 +298,36 @@ def test_barge_in_only_fires_once():
 
         clear_events = [e for e in ws.sent if e.get('event') == 'clear']
         assert len(clear_events) == 1  # only fired once
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+
+def test_barge_in_grace_period_blocks_early_trigger():
+    """Barge-in is suppressed during the grace period — PSTN echo guard."""
+    import time as _time
+    from app.services.realtime.stream_ingester import MIN_BARGE_IN_FRAMES, BARGE_IN_GRACE_SECONDS
+    ingester = StreamIngester()
+    session = _make_session()
+    session.stream_sid = 'MZ_test'
+    ws = _FakeWebSocket()
+
+    async def run():
+        session.tts_active = True
+        session.asr_active = False
+        session.vad._speech = True
+        # Grace period is active (default: barge_in_grace_until == 0.0 → will be set on first frame)
+
+        # Send well above MIN_BARGE_IN_FRAMES — should NOT fire while in grace period
+        for _ in range(MIN_BARGE_IN_FRAMES + 5):
+            result = await ingester._process_audio_frame(session, ws, _silence_frame())
+            assert result is None
+            assert session.barge_in_requested is False
+
+        # Grace period deadline should now be set
+        assert session.barge_in_grace_until > 0.0
+
+        clear_events = [e for e in ws.sent if e.get('event') == 'clear']
+        assert len(clear_events) == 0  # no barge-in during grace period
 
     asyncio.get_event_loop().run_until_complete(run())
 

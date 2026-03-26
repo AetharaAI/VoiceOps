@@ -89,6 +89,7 @@ ASR_SAMPLE_RATE = 16000
 MIN_SPEECH_FRAMES = 2
 END_OF_TURN_SILENCE_FRAMES = 30
 MIN_BARGE_IN_FRAMES = 4   # consecutive voiced frames required to trigger barge-in
+BARGE_IN_GRACE_SECONDS = 1.5  # ignore barge-in for this long after TTS starts (PSTN echo guard)
 TTS_MEDIA_CHUNK_BYTES = 640
 RECENT_FRAME_BUFFER = 10
 
@@ -139,6 +140,7 @@ class IngesterSession:
     # Barge-in: set by Ingester when caller speaks during TTS
     barge_in_requested: bool = False
     barge_in_voiced_frames: int = 0   # debounce counter
+    barge_in_grace_until: float = 0.0  # monotonic timestamp; barge-in blocked until this passes
 
     # Stash for call.incoming payload — published when stream_sid is set, not before
     _call_incoming_payload: Any = field(default=None)
@@ -212,6 +214,7 @@ class StreamIngester:
                 session.tts_active = False
                 session.barge_in_requested = False
                 session.barge_in_voiced_frames = 0
+                session.barge_in_grace_until = 0.0  # reset for next TTS utterance
                 continue
             if not session.stream_sid:
                 continue
@@ -254,20 +257,26 @@ class StreamIngester:
             # While TTS is active we skip normal speech/ASR detection entirely —
             # only count toward barge-in threshold.
             if session.tts_active and not session.barge_in_requested:
-                if is_speech:
-                    session.barge_in_voiced_frames += 1
-                else:
-                    session.barge_in_voiced_frames = 0
-                if session.barge_in_voiced_frames >= MIN_BARGE_IN_FRAMES:
-                    session.barge_in_requested = True
-                    session.barge_in_voiced_frames = 0
-                    if session.stream_sid:
-                        await self._send_to_twilio(
-                            websocket, session,
-                            {'event': 'clear', 'streamSid': session.stream_sid},
-                        )
-                    session.vad_speech_events += 1
-                    vad_event = {'type': 'barge_in', 'timestamp_ms': int(time.time() * 1000)}
+                now = time.monotonic()
+                # Grace period: ignore barge-in at TTS start to avoid PSTN echo triggering it.
+                # Set the deadline on the first frame where tts_active is True.
+                if session.barge_in_grace_until == 0.0:
+                    session.barge_in_grace_until = now + BARGE_IN_GRACE_SECONDS
+                if now >= session.barge_in_grace_until:
+                    if is_speech:
+                        session.barge_in_voiced_frames += 1
+                    else:
+                        session.barge_in_voiced_frames = 0
+                    if session.barge_in_voiced_frames >= MIN_BARGE_IN_FRAMES:
+                        session.barge_in_requested = True
+                        session.barge_in_voiced_frames = 0
+                        if session.stream_sid:
+                            await self._send_to_twilio(
+                                websocket, session,
+                                {'event': 'clear', 'streamSid': session.stream_sid},
+                            )
+                        session.vad_speech_events += 1
+                        vad_event = {'type': 'barge_in', 'timestamp_ms': int(time.time() * 1000)}
                 continue  # always skip ASR detection while TTS is playing
 
             if not session.asr_active:
