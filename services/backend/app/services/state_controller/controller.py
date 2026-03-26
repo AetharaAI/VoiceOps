@@ -123,6 +123,7 @@ class CallFSMState:
     # Silence timeout — monotonic timestamp when we should fire timeout.silence
     silence_deadline: float | None = None
     silence_timeout_seconds: float = 10.0
+    last_recovery_prompt: str = ''
 
 
 # ---------------------------------------------------------------------------
@@ -343,17 +344,30 @@ class StateController:
         self, state: CallFSMState, base: FSMEventBase, publisher: StreamPublisher
     ) -> None:
         """Caller spoke — advance the FSM."""
-        state.asr_listening = False
-        state.silence_deadline = None
-        state.silence_retry_count = 0
-        state.caller_turns += 1
-
         payload = base.payload
         text = (
             payload.get('text', '')
             if isinstance(payload, dict)
             else getattr(payload, 'text', '')
         )
+        is_final = (
+            payload.get('is_final', True)
+            if isinstance(payload, dict)
+            else getattr(payload, 'is_final', True)
+        )
+
+        # ASR partial: caller is actively speaking. Keep listen mode active and
+        # extend the silence deadline so we don't talk over long utterances.
+        if not bool(is_final):
+            if state.asr_listening:
+                state.silence_deadline = time.monotonic() + self._resolve_listen_timeout(state)
+            return
+
+        state.asr_listening = False
+        state.silence_deadline = None
+        state.silence_retry_count = 0
+        state.last_recovery_prompt = ''
+        state.caller_turns += 1
 
         if not text or not text.strip():
             await self._handle_empty_transcript(state, publisher)
@@ -535,7 +549,22 @@ class StateController:
                 state, publisher, reason='max_silence_timeout', transcript=''
             )
         else:
-            recovery = self._runtime.build_connection_check_prompt(previous_prompt='')
+            # Prefer field-aware retry prompts when we're collecting a known field.
+            if state.last_prompted_field:
+                recovery = self._runtime.build_field_retry_prompt(
+                    agent=state.agent,
+                    field_name=state.last_prompted_field,
+                    retry_count=state.silence_retry_count,
+                    retry_reason='no_speech',
+                    previous_prompt=state.last_recovery_prompt,
+                )
+            else:
+                recovery = self._runtime.build_general_recovery_prompt(
+                    retry_reason='no_speech',
+                    retry_count=state.silence_retry_count,
+                    previous_prompt=state.last_recovery_prompt,
+                )
+            state.last_recovery_prompt = recovery
             await self._emit_tts(state, publisher, text=recovery,
                                  response_source='silence_recovery')
 
@@ -643,7 +672,7 @@ class StateController:
             })
             return  # hard-listen guarantee enforced
 
-        timeout = timeout_seconds or state.silence_timeout_seconds
+        timeout = timeout_seconds or self._resolve_listen_timeout(state)
         asr_payload = ASRStartListenPayload(
             fsm_state=state.current_state,
             prompted_field=state.last_prompted_field,
@@ -663,8 +692,17 @@ class StateController:
         logger.info('state_ctrl.asr.start_listen', extra={
             'correlation_id': '', 'tenant_id': state.tenant_id,
             'call_id': state.call_id, 'fsm_state': state.current_state,
-            'timeout_s': timeout,
+            'timeout_s': timeout, 'prompted_field': state.last_prompted_field or '',
         })
+
+    def _resolve_listen_timeout(self, state: CallFSMState) -> float:
+        timeout = state.silence_timeout_seconds
+        field_name = (state.last_prompted_field or '').lower()
+        if state.current_state == 'S1':
+            timeout = max(timeout, 12.0)
+        if field_name in {'phone', 'phone_number', 'callback_number', 'callback_phone', 'best_callback_number'}:
+            timeout = max(timeout, 16.0)
+        return timeout
 
     # ------------------------------------------------------------------
     # Observability: emit llm.extract + llm.extracted for audit trail

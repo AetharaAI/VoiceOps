@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-03-26 — fsm-build branch (silence/talk-over fix pass)
+
+- Investigated `logs/working-logs-0.5.md` and confirmed false silence recovery prompts were firing while caller speech was still in-flight to final ASR transcript.
+- Added ASR partial heartbeat publishing in `services/backend/app/services/asr/consumer.py`:
+  - forwards `partial_transcript` events as `asr.transcript` with `is_final=false`
+  - deduplicates repeated partial text
+  - publishes a final `asr.transcript` whenever speech occurred (even with empty final text)
+- Updated `services/backend/app/services/state_controller/controller.py`:
+  - non-final `asr.transcript` now extends `silence_deadline` instead of triggering response generation
+  - added dynamic listen timeout floors:
+    - greeting listen floor: `12s`
+    - phone/callback capture listen floor: `16s`
+  - replaced repeated fixed connection-check phrase with rotating field-aware/general recovery prompts
+  - added `prompted_field` to `state_ctrl.asr.start_listen` logs
+- Updated `services/backend/app/services/streams/event_schemas.py` docstring for `ASRTranscriptPayload` to reflect partial+final semantics.
+- Added/updated tests:
+  - `services/backend/tests/test_state_controller.py` now verifies partial transcript behavior (deadline extension, no premature TTS)
+- Verification:
+  - `cd services/backend && pytest -q tests/test_state_controller.py tests/test_fsm_consumers.py tests/test_stream_ingester.py tests/test_stream_event_schemas.py`
+  - Result: `87 passed`
+
 ## 2026-03-26 — fsm-build branch (live call polish pass)
 
 - Established new known-good baseline from `logs/working-logs-huge-win-0.4.md` (call id `0d03c5d4-bc7a-4b84-9e58-f56fede68fb2`):

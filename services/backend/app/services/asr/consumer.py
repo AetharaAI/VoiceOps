@@ -192,11 +192,38 @@ class ASRConsumer:
         started_ms: int | None = None
         ended_ms: int | None = None
         error_msg: str | None = None
+        got_speech = False
+        last_partial_text = ''
 
         try:
-            asr_stream = await self._client.start_stream(call_id=base.call_id)
+            async def _on_asr_event(event: dict) -> None:
+                nonlocal last_partial_text
+                event_type = str(event.get('type') or '')
+                if event_type != 'partial_transcript':
+                    return
+                text = str(event.get('text') or '').strip()
+                if not text or text == last_partial_text:
+                    return
+                last_partial_text = text
+                await publisher.publish(make_event(
+                    ASRTranscriptEvent,
+                    session_id=base.session_id,
+                    call_id=base.call_id,
+                    payload=ASRTranscriptPayload(
+                        text=text,
+                        is_final=False,
+                        asr_session_id=getattr(asr_stream, 'session_id', '') if asr_stream else '',
+                    ),
+                ))
+                logger.debug('asr_consumer.partial.published', extra={
+                    'correlation_id': '', 'tenant_id': '',
+                    'call_id': base.call_id, 'text_preview': text[:80],
+                })
 
-            got_speech = False
+            asr_stream = await self._client.start_stream(
+                call_id=base.call_id,
+                on_event=_on_asr_event,
+            )
             while True:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -240,10 +267,9 @@ class ASRConsumer:
                 with contextlib.suppress(Exception):
                     await asr_stream.close()
 
-        # Always publish asr.transcript (even empty) so State Controller can react.
-        # Empty text → State Controller emits recovery TTS.
-        # Only publish if we actually entered a listen window (got_speech or error).
-        if transcript_text or error_msg is not None:
+        # Publish final asr.transcript whenever we heard speech or an ASR error occurred.
+        # Empty final text is meaningful and should still reach the State Controller.
+        if got_speech or error_msg is not None:
             await publisher.publish(make_event(
                 ASRTranscriptEvent,
                 session_id=base.session_id,

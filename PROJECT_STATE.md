@@ -18,6 +18,12 @@
   - Voice selection remained consistent end-to-end (`bf_isabella`, `kokoro_realtime`)
   - Conversation reached intelligent multi-turn behavior with field capture
   - Remaining polish issue observed: premature silence recovery prompts and occasional choppy truncation
+- Follow-up call trace `logs/working-logs-0.5.md` showed talk-over due to silence timeout firing before final ASR transcript arrival during longer caller utterances.
+- Current mitigation (implemented on `2026-03-26`):
+  - ASR partial transcripts are now emitted into FSM stream (`asr.transcript` with `is_final=false`)
+  - State Controller extends listen deadline on non-final transcripts instead of responding
+  - listen window is now dynamic (`12s` greeting floor, `16s` phone/callback floor)
+  - silence recovery prompts now rotate and prefer field-aware wording instead of repeating a fixed phrase
 
 ## Deployment Mode (Current)
 - Runtime: Docker Compose (`docker-compose.yml`) on CPU gateway node.
@@ -97,6 +103,7 @@ Phase 3 (FSM Pipeline) is **COMPLETE** on the `fsm-build` branch. All 84 tests p
    - `silence_timeout_seconds` increased `8.0 -> 10.0`
    - end-of-turn silence threshold increased `30 -> 40` frames in both FSM + legacy paths
    - live LLM phone prompt tightened to reduce filler/chuckle-like outputs and trailing fragments
+   - partial-transcript heartbeat and dynamic listen timeout behavior validated against long phone-number capture turns
 3. Wire LLM Consumer into `handle_ws()` (Phase 4 LLM decoupling).
 4. Add end-to-end call smoke-test automation and transcript validation.
 5. Move frontend from `next dev` container to production build/start path.

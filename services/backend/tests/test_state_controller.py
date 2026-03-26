@@ -121,12 +121,12 @@ def _make_tts_complete_event(state: CallFSMState, tts_request_id: str | None = N
     )
 
 
-def _make_transcript_event(state: CallFSMState, text: str) -> FSMEventBase:
+def _make_transcript_event(state: CallFSMState, text: str, *, is_final: bool = True) -> FSMEventBase:
     return make_event(
         ASRTranscriptEvent,
         session_id=state.session_id,
         call_id=state.call_id,
-        payload=ASRTranscriptPayload(text=text),
+        payload=ASRTranscriptPayload(text=text, is_final=is_final),
     )
 
 
@@ -347,6 +347,29 @@ def test_asr_transcript_clears_listening_flag():
     assert state.asr_listening is False
     assert state.silence_deadline is None
     assert state.caller_turns == 1
+
+
+def test_asr_partial_transcript_extends_deadline_without_agent_turn():
+    """Non-final asr.transcript keeps listen active and only extends deadline."""
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S2'
+    state.last_prompted_field = 'callback_number'
+    state.asr_listening = True
+    state.silence_deadline = 1.0
+    publisher = _FakePublisher()
+
+    async def run():
+        event = _make_transcript_event(state, text='eight one two', is_final=False)
+        await ctrl._on_asr_transcript(state, event, publisher)
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+    assert state.asr_listening is True
+    assert state.silence_deadline is not None
+    assert state.silence_deadline > 1.0
+    assert state.caller_turns == 0
+    assert len(publisher.events_of_type('tts.speak')) == 0
 
 
 def test_asr_transcript_increments_caller_turns():

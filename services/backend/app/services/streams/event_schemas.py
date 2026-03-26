@@ -91,7 +91,7 @@ class ASRStartListenPayload(BaseModel):
 
 
 class ASRTranscriptPayload(BaseModel):
-    """ASR returned a final transcript for the current caller turn."""
+    """ASR transcript event (partial or final) for the current caller turn."""
     text: str
     confidence: float | None = None
     duration_ms: int | None = None
