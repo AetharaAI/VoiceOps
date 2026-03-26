@@ -124,6 +124,8 @@ class CallFSMState:
     silence_deadline: float | None = None
     silence_timeout_seconds: float = 10.0
     last_recovery_prompt: str = ''
+    last_listen_started_at: float | None = None
+    empty_transcript_count: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +369,7 @@ class StateController:
         state.silence_deadline = None
         state.silence_retry_count = 0
         state.last_recovery_prompt = ''
+        state.empty_transcript_count = 0
         state.caller_turns += 1
 
         if not text or not text.strip():
@@ -526,11 +529,34 @@ class StateController:
         self, state: CallFSMState, publisher: StreamPublisher
     ) -> None:
         """Empty or noise-only transcript."""
-        recovery = self._runtime.build_general_recovery_prompt(
-            retry_reason='no_speech',
-            retry_count=state.silence_retry_count,
-            previous_prompt='',
+        state.empty_transcript_count += 1
+        listen_elapsed = (
+            time.monotonic() - state.last_listen_started_at
+            if state.last_listen_started_at is not None
+            else None
         )
+
+        # First quick empty result is usually edge/noise; restart listen silently
+        # instead of immediately interrupting the caller with another prompt.
+        if state.empty_transcript_count == 1 and (listen_elapsed is None or listen_elapsed < 2.5):
+            await self._emit_asr_start_listen(state, publisher)
+            return
+
+        if state.last_prompted_field:
+            recovery = self._runtime.build_field_retry_prompt(
+                agent=state.agent,
+                field_name=state.last_prompted_field,
+                retry_count=max(state.empty_transcript_count, state.silence_retry_count),
+                retry_reason='partial_unclear_speech',
+                previous_prompt=state.last_recovery_prompt,
+            )
+        else:
+            recovery = self._runtime.build_general_recovery_prompt(
+                retry_reason='no_speech',
+                retry_count=max(state.empty_transcript_count, state.silence_retry_count),
+                previous_prompt=state.last_recovery_prompt,
+            )
+        state.last_recovery_prompt = recovery
         await self._emit_tts(state, publisher, text=recovery,
                              response_source='recovery_prompt')
 
@@ -688,6 +714,7 @@ class StateController:
 
         state.asr_listening = True
         state.silence_deadline = time.monotonic() + timeout
+        state.last_listen_started_at = time.monotonic()
 
         logger.info('state_ctrl.asr.start_listen', extra={
             'correlation_id': '', 'tenant_id': state.tenant_id,
@@ -702,6 +729,8 @@ class StateController:
             timeout = max(timeout, 12.0)
         if field_name in {'phone', 'phone_number', 'callback_number', 'callback_phone', 'best_callback_number'}:
             timeout = max(timeout, 16.0)
+        if field_name in {'name', 'full_name', 'customer_name'}:
+            timeout = max(timeout, 12.0)
         return timeout
 
     # ------------------------------------------------------------------

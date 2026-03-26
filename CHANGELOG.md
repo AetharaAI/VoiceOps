@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-03-26 — fsm-build branch (0.6 first-turn overlap fix pass)
+
+- Investigated `logs/working-logs-0.6.md` and found two first-turn issues:
+  - quick empty ASR finals triggered immediate spoken recovery prompts (`"I didn't hear anything there."`), creating overlap pressure
+  - prompted-field extraction was too broad and could capture unrelated required fields from noisy utterances
+- Updated `services/backend/app/services/state_controller/controller.py`:
+  - added `last_listen_started_at` and `empty_transcript_count` tracking
+  - first quick empty transcript now silently re-opens `asr.start_listen` (no immediate TTS interruption)
+  - subsequent empty transcripts use rotating field-aware recovery wording
+  - added 12s listen floor for `name` capture turns
+- Updated `services/backend/app/services/agent_runtime/runtime.py`:
+  - when a `prompted_field` is active, extraction now targets only that field
+  - improved noisy name fallback parsing for short snippets (e.g., `"Why, Mary,"`) while avoiding long non-name utterances
+- Added tests:
+  - `services/backend/tests/test_state_controller.py`:
+    - quick empty transcript restarts listen silently
+  - `services/backend/tests/test_agent_runtime.py`:
+    - prompted-field-only extraction behavior
+    - noisy phrase name extraction
+- Verification:
+  - `cd services/backend && pytest -q tests/test_agent_runtime.py tests/test_state_controller.py tests/test_fsm_consumers.py tests/test_stream_ingester.py tests/test_stream_event_schemas.py`
+  - Result: `104 passed`
+
 ## 2026-03-26 — fsm-build branch (silence/talk-over fix pass)
 
 - Investigated `logs/working-logs-0.5.md` and confirmed false silence recovery prompts were firing while caller speech was still in-flight to final ASR transcript.

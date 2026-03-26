@@ -144,6 +144,28 @@ def test_recovery_prompts_vary_and_avoid_immediate_repeat() -> None:
     assert 'full name' in second.lower()
 
 
+def test_capture_required_fields_only_targets_prompted_field() -> None:
+    agent = _make_agent(
+        {
+            'name': {'prompt': 'Can I have your full name?'},
+            'organization': {'prompt': 'What company are you with?'},
+        }
+    )
+
+    captured = agent_runtime.capture_required_fields(
+        agent=agent,
+        user_text="It's good, Corey.",
+        collected_fields={},
+        prompted_field='name',
+    )
+
+    assert captured == {'name': 'Corey'}
+
+
+def test_extract_name_handles_noisy_phrase() -> None:
+    assert agent_runtime._extract_name('Why, Mary,') == 'Mary'
+
+
 @pytest.mark.asyncio
 async def test_generate_response_sends_enable_thinking_in_extra_body(monkeypatch) -> None:
     agent = _make_agent()

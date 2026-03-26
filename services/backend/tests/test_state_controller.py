@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -436,6 +437,7 @@ def test_asr_empty_transcript_emits_recovery_tts():
     state = _make_fsm_state()
     state.current_state = 'S2'
     state.asr_listening = True
+    state.last_listen_started_at = time.monotonic() - 3.0
     publisher = _FakePublisher()
 
     async def run():
@@ -447,6 +449,25 @@ def test_asr_empty_transcript_emits_recovery_tts():
     assert state.current_state != 'Esc'
     tts_events = publisher.events_of_type('tts.speak')
     assert len(tts_events) >= 1
+
+
+def test_asr_empty_transcript_quick_result_restarts_listen_silently():
+    """First quick empty transcript should re-open listen without speaking."""
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S2'
+    state.asr_listening = True
+    state.last_listen_started_at = time.monotonic()
+    publisher = _FakePublisher()
+
+    async def run():
+        event = _make_transcript_event(state, text='')
+        await ctrl._on_asr_transcript(state, event, publisher)
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+    assert len(publisher.events_of_type('tts.speak')) == 0
+    assert len(publisher.events_of_type('asr.start_listen')) == 1
 
 
 # ---------------------------------------------------------------------------

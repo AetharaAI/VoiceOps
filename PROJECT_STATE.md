@@ -24,6 +24,11 @@
   - State Controller extends listen deadline on non-final transcripts instead of responding
   - listen window is now dynamic (`12s` greeting floor, `16s` phone/callback floor)
   - silence recovery prompts now rotate and prefer field-aware wording instead of repeating a fixed phrase
+- Additional `0.6` mitigation (implemented on `2026-03-26`):
+  - first quick empty ASR final now reopens listening silently (no immediate recovery TTS)
+  - name capture listen floor set to `12s`
+  - required-field extraction is now constrained to the currently prompted field to avoid noisy cross-field captures
+  - noisy short-phrase name fallback improved for real caller phrasing
 
 ## Deployment Mode (Current)
 - Runtime: Docker Compose (`docker-compose.yml`) on CPU gateway node.
@@ -104,6 +109,7 @@ Phase 3 (FSM Pipeline) is **COMPLETE** on the `fsm-build` branch. All 84 tests p
    - end-of-turn silence threshold increased `30 -> 40` frames in both FSM + legacy paths
    - live LLM phone prompt tightened to reduce filler/chuckle-like outputs and trailing fragments
    - partial-transcript heartbeat and dynamic listen timeout behavior validated against long phone-number capture turns
+   - first-turn empty transcript behavior validated to avoid immediate talk-over recovery prompts
 3. Wire LLM Consumer into `handle_ws()` (Phase 4 LLM decoupling).
 4. Add end-to-end call smoke-test automation and transcript validation.
 5. Move frontend from `next dev` container to production build/start path.

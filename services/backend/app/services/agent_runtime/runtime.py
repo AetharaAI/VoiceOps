@@ -13,6 +13,10 @@ logger = get_logger(__name__)
 
 ESCALATION_KEYWORDS = {'lawyer', 'sue', 'cancel now', 'human', 'manager', 'angry'}
 GENERIC_NOISE = {'yes', 'yeah', 'yep', 'no', 'nope', 'hello', 'hi', 'okay', 'ok', 'sure'}
+NAME_NOISE_WORDS = {
+    'my', 'name', 'is', 'this', 'i', 'am', "i'm", 'it', "it's",
+    'uh', 'um', 'hmm', 'well', 'why', 'like', 'so', 'just',
+}
 NAME_PREFIX_PATTERN = re.compile(r'^(my name is|name is|this is|i am|i\'m|it is|it\'s)\s+', re.IGNORECASE)
 ISSUE_PREFIX_PATTERN = re.compile(
     r'^(i need|i am calling about|i\'m calling about|calling about|it\'s about|the issue is)\s+',
@@ -506,10 +510,13 @@ class AgentRuntime:
         prompted_field: str | None = None,
     ) -> dict[str, str]:
         missing_fields = self.missing_required_fields(agent=agent, collected_fields=collected_fields)
-        ordered_fields: list[str] = []
+        ordered_fields: list[str]
         if prompted_field and prompted_field in missing_fields:
-            ordered_fields.append(prompted_field)
-        ordered_fields.extend(field_name for field_name in missing_fields if field_name not in ordered_fields)
+            # Keep extraction aligned with the current question to avoid
+            # polluting unrelated fields from noisy utterances.
+            ordered_fields = [prompted_field]
+        else:
+            ordered_fields = list(missing_fields)
 
         captured: dict[str, str] = {}
         for field_name in ordered_fields:
@@ -540,17 +547,27 @@ class AgentRuntime:
     def _extract_name(self, user_text: str) -> str | None:
         cleaned = NAME_PREFIX_PATTERN.sub('', user_text).strip(" .,!?:;\"'")
         if not cleaned or any(char.isdigit() for char in cleaned):
-            return None
+            cleaned = ''
         parts = [part for part in re.split(r'\s+', cleaned) if part]
-        if not 1 <= len(parts) <= 4:
+        if 1 <= len(parts) <= 4:
+            if any(part.lower() in {'need', 'calling', 'issue', 'problem', 'service'} for part in parts):
+                return None
+            if ' '.join(parts).lower() in GENERIC_NOISE:
+                return None
+            if all(re.fullmatch(r"[A-Za-z][A-Za-z'\-]*", part) for part in parts):
+                return ' '.join(part.capitalize() for part in parts)
+
+        # Fallback for noisy telephony snippets like "Why, Mary" or "it's good, Corey".
+        tokens = re.findall(r"[A-Za-z][A-Za-z'\-]*", user_text)
+        if len(tokens) > 4:
             return None
-        if any(part.lower() in {'need', 'calling', 'issue', 'problem', 'service'} for part in parts):
+        candidates = [t for t in tokens if t.lower() not in NAME_NOISE_WORDS]
+        if not candidates:
             return None
-        if ' '.join(parts).lower() in GENERIC_NOISE:
+        candidate = candidates[-1]
+        if len(candidate) < 2:
             return None
-        if not all(re.fullmatch(r"[A-Za-z][A-Za-z'\-]*", part) for part in parts):
-            return None
-        return ' '.join(part.capitalize() for part in parts)
+        return candidate.capitalize()
 
     def _extract_phone(self, user_text: str) -> str | None:
         digits = ''.join(char for char in user_text if char.isdigit())
