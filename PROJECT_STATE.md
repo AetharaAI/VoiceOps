@@ -77,6 +77,7 @@
 - Manual DB migration path is authoritative until migration pipeline is reintroduced safely.
 - Call flow is functional but still needs polish:
   - ASR silence detection and retry timing still need refinement under real PSTN pauses
+  - background-noise tolerance / VAD sensitivity needs explicit calibration against real-world room noise (TV/podcast bleed) to avoid false no-speech handling
   - outbound field-collection flow still needs cleanup against real-call behavior
   - dual-model stream consumer integration is not implemented yet
 - Reverse proxy assumptions matter:

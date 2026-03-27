@@ -76,6 +76,7 @@ MAX_SILENCE_RETRIES = 2     # global: after this many silent turns, escalate
 STREAM_POLL_BLOCK_MS = 500  # XREADGROUP block timeout
 
 TERMINAL_STATES = frozenset({'S7', 'Esc'})
+S6_CONFIRMATION_TIMEOUT_FLOOR = 14.0
 
 # Events the State Controller should skip when consuming its own stream
 _SKIP_EVENT_TYPES = STATE_CONTROLLER_COMMANDS | {'llm.extract', 'llm.classify'}
@@ -527,8 +528,13 @@ class StateController:
                                      response_source='confirmation_correction')
 
         else:
-            # Unclear — re-read back (nudge)
-            await self._enter_s6_tts(state, publisher)
+            # Unclear yes/no — nudge without repeating full readback.
+            await self._emit_tts(
+                state,
+                publisher,
+                text=self._confirmation_retry_prompt(),
+                response_source='confirmation_retry',
+            )
 
     async def _handle_empty_transcript(
         self, state: CallFSMState, publisher: StreamPublisher
@@ -558,6 +564,8 @@ class StateController:
                 retry_reason='partial_unclear_speech',
                 previous_prompt=state.last_recovery_prompt,
             )
+        elif state.current_state == 'S6':
+            recovery = self._confirmation_retry_prompt()
         else:
             recovery = self._runtime.build_general_recovery_prompt(
                 retry_reason='no_speech',
@@ -592,6 +600,8 @@ class StateController:
                     retry_reason='no_speech',
                     previous_prompt=state.last_recovery_prompt,
                 )
+            elif state.current_state == 'S6':
+                recovery = self._confirmation_retry_prompt()
             else:
                 recovery = self._runtime.build_general_recovery_prompt(
                     retry_reason='no_speech',
@@ -627,11 +637,22 @@ class StateController:
     ) -> None:
         """Build and emit the readback confirmation prompt."""
         state.last_prompted_field = None
-        parts = [
-            f'{k.replace("_", " ").title()}: {self._format_field_for_readback(k, v)}'
-            for k, v in state.collected_fields.items()
-            if v
-        ]
+        parts: list[str] = []
+        required_fields = state.agent.required_fields if isinstance(state.agent.required_fields, dict) else {}
+        if required_fields:
+            for field_name in required_fields.keys():
+                value = state.collected_fields.get(field_name)
+                if value:
+                    parts.append(
+                        f'{field_name.replace("_", " ").title()}: '
+                        f'{self._format_field_for_readback(field_name, value)}'
+                    )
+        else:
+            parts = [
+                f'{k.replace("_", " ").title()}: {self._format_field_for_readback(k, v)}'
+                for k, v in state.collected_fields.items()
+                if v
+            ]
         if parts:
             readback = 'Let me confirm what I have. ' + ', '.join(parts) + '. Is that all correct?'
         else:
@@ -736,11 +757,16 @@ class StateController:
         field_name = (state.last_prompted_field or '').lower()
         if state.current_state == 'S1':
             timeout = max(timeout, 12.0)
+        if state.current_state == 'S6':
+            timeout = max(timeout, S6_CONFIRMATION_TIMEOUT_FLOOR)
         if field_name in {'phone', 'phone_number', 'callback_number', 'callback_phone', 'best_callback_number'}:
             timeout = max(timeout, 16.0)
         if field_name in {'name', 'full_name', 'customer_name'}:
             timeout = max(timeout, 12.0)
         return timeout
+
+    def _confirmation_retry_prompt(self) -> str:
+        return 'Please say yes if everything is correct, or no if you want to change something.'
 
     def _format_field_for_readback(self, field_name: str, value: str) -> str:
         if not value:

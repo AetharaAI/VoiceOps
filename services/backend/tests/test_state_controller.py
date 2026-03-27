@@ -513,6 +513,25 @@ def test_silence_timeout_fires_recovery_on_first_miss():
     assert len(tts_events) == 1
 
 
+def test_silence_timeout_in_s6_uses_confirmation_retry_prompt():
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S6'
+    state.asr_listening = True
+    state.silence_retry_count = 0
+    publisher = _FakePublisher()
+
+    asyncio.get_event_loop().run_until_complete(
+        ctrl._on_silence_timeout(state, publisher)
+    )
+
+    tts = publisher.last_of_type('tts.speak')
+    assert tts is not None
+    assert tts.payload.response_source == 'silence_recovery'
+    assert 'yes' in tts.payload.text.lower()
+    assert 'no' in tts.payload.text.lower()
+
+
 def test_silence_timeout_escalates_after_max_retries():
     """After MAX_SILENCE_RETRIES silence timeouts, escalate."""
     from app.services.state_controller.controller import MAX_SILENCE_RETRIES
@@ -550,6 +569,10 @@ def test_enter_s6_readback_formats_callback_number_as_digits():
     ctrl = StateController()
     state = _make_fsm_state()
     state.current_state = 'S6'
+    state.agent.required_fields = {
+        'name': {'prompt': 'Name?'},
+        'callback_number': {'prompt': 'Best callback number?'},
+    }
     state.last_prompted_field = 'callback_number'
     state.collected_fields = {
         'name': 'Mary',
@@ -566,6 +589,47 @@ def test_enter_s6_readback_formats_callback_number_as_digits():
     assert tts is not None
     assert '8 1 2 3 6 3 2 4 2 4' in tts.payload.text
     assert state.last_prompted_field is None
+
+
+def test_enter_s6_readback_only_uses_required_fields():
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S6'
+    state.agent.required_fields = {
+        'name': {'prompt': 'Name?'},
+        'callback_number': {'prompt': 'Best callback number?'},
+    }
+    state.collected_fields = {
+        'name': 'Corey',
+        'callback_number': '8123632424',
+        'best_follow_up_method': 'Text me after 5 pm',
+        'organization': 'Not required',
+    }
+    publisher = _FakePublisher()
+
+    async def run():
+        await ctrl._enter_s6_tts(state, publisher)
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+    tts = publisher.last_of_type('tts.speak')
+    assert tts is not None
+    assert 'Name: Corey' in tts.payload.text
+    assert 'Callback Number: 8 1 2 3 6 3 2 4 2 4' in tts.payload.text
+    assert 'Best Follow Up Method' not in tts.payload.text
+    assert 'Organization' not in tts.payload.text
+
+
+def test_resolve_listen_timeout_in_s6_has_confirmation_floor():
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S6'
+    state.silence_timeout_seconds = 10.0
+    state.last_prompted_field = None
+
+    timeout = ctrl._resolve_listen_timeout(state)
+
+    assert timeout >= 14.0
 
 
 # ---------------------------------------------------------------------------
@@ -636,6 +700,27 @@ def test_confirmation_no_triggers_retry():
     # Still in S6 (not escalated on first denial)
     assert state.current_state == 'S6'
     assert publisher.last_of_type('tts.speak') is not None
+
+
+def test_confirmation_unclear_uses_yes_no_retry_prompt():
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S6'
+    state.asr_listening = True
+    publisher = _FakePublisher()
+
+    async def run():
+        event = _make_transcript_event(state, text='maybe I guess')
+        await ctrl._on_asr_transcript(state, event, publisher)
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+    assert state.current_state == 'S6'
+    tts = publisher.last_of_type('tts.speak')
+    assert tts is not None
+    assert tts.payload.response_source == 'confirmation_retry'
+    assert 'yes' in tts.payload.text.lower()
+    assert 'no' in tts.payload.text.lower()
 
 
 # ---------------------------------------------------------------------------

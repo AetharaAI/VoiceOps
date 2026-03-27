@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-03-27 — fsm-build branch (0.8 confirmation/readback polish pass)
+
+- Investigated `logs/working-logs-0.8.md` and fixed S6 confirmation-loop issues:
+  - readback included non-required captured fields
+  - confirmation listen timeout was too short for natural yes/no pauses
+  - silence/unclear handling in S6 reused generic recovery and repeated full readback too aggressively
+- Updated `services/backend/app/services/state_controller/controller.py`:
+  - S6 readback now uses only `agent.required_fields` keys (ordered), instead of all `collected_fields`
+  - added S6 confirmation listen timeout floor (`14s`)
+  - added S6-specific yes/no retry prompt for silence and unclear transcripts
+  - unclear S6 confirmations now use concise yes/no retry instead of re-reading full intake immediately
+- Added tests in `services/backend/tests/test_state_controller.py`:
+  - S6 silence timeout uses confirmation retry prompt
+  - S6 readback excludes non-required fields
+  - S6 listen-timeout floor enforcement
+  - unclear confirmation path uses yes/no retry prompt
+- Added operational note in `PROJECT_STATE.md`:
+  - track VAD/background-noise sensitivity calibration for real-world phone environments
+
+## 2026-03-27 — fsm-build branch (platform integration runbook added)
+
+- Added platform control-plane integration runbook for VoiceOps user/tenant/key/billing orchestration:
+  - `internal-docs/PLATFORM_API_INTEGRATION_RUNBOOK_2026-03-27.md`
+- Runbook is anchored to current VoiceOps truth and explicitly keeps existing VoiceOps Postgres wiring unchanged.
+- Includes:
+  - current available provisioning/auth endpoints
+  - control-plane vs execution-plane ownership split
+  - phased rollout and failure handling strategy
+  - security and idempotency requirements for cross-VM platform calls
+
 ## 2026-03-27 — fsm-build branch (Voxtream2 Studio registry voice source fix)
 
 - Implemented Voxtream2 voice loading from the Voice Substrate Studio registry (cross-VM source of truth):
