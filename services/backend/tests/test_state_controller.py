@@ -490,6 +490,46 @@ def test_asr_empty_transcript_quick_result_restarts_listen_silently():
     assert len(publisher.events_of_type('asr.start_listen')) == 1
 
 
+def test_asr_empty_transcript_does_not_reset_empty_counter_or_increment_turns():
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S2'
+    state.asr_listening = True
+    state.empty_transcript_count = 1
+    state.caller_turns = 0
+    state.last_listen_started_at = time.monotonic()
+    publisher = _FakePublisher()
+
+    async def run():
+        event = _make_transcript_event(state, text='')
+        await ctrl._on_asr_transcript(state, event, publisher)
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+    assert state.empty_transcript_count == 2
+    assert state.caller_turns == 0
+
+
+def test_s6_ignores_duplicate_confirmation_retry_prompt_on_empty_transcript():
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S6'
+    state.asr_listening = True
+    state.last_listen_started_at = time.monotonic() - 3.0
+    state.last_recovery_prompt = ctrl._confirmation_retry_prompt()
+    state.empty_transcript_count = 1
+    publisher = _FakePublisher()
+
+    async def run():
+        event = _make_transcript_event(state, text='')
+        await ctrl._on_asr_transcript(state, event, publisher)
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+    assert len(publisher.events_of_type('tts.speak')) == 0
+    assert len(publisher.events_of_type('asr.start_listen')) == 1
+
+
 # ---------------------------------------------------------------------------
 # Silence timeout
 # ---------------------------------------------------------------------------

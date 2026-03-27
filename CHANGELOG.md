@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-03-27 — fsm-build branch (0.9 near-100% polish pass)
+
+- Investigated `logs/working-logs-0.9_1st_Near-100%.md` and fixed two remaining live-call polish issues:
+  - empty ASR final transcripts in confirmation loop could repeatedly trigger the same retry line
+  - noisy name phrase like `"Gibson and 812..."` could capture `"And"` as caller name
+- Updated `services/backend/app/services/state_controller/controller.py`:
+  - empty transcripts no longer reset silence/empty counters as if valid caller speech occurred
+  - caller turn count now increments only on non-empty final transcripts
+  - S6 confirmation loop now suppresses back-to-back duplicate yes/no retry prompts on repeated empty ASR finals
+- Updated `services/backend/app/services/agent_runtime/runtime.py`:
+  - added `and` to name-noise filtering to avoid bad trailing-token name capture
+- Added tests:
+  - `services/backend/tests/test_state_controller.py`
+    - empty transcript counter/turn handling regression
+    - S6 duplicate confirmation retry suppression
+  - `services/backend/tests/test_agent_runtime.py`
+    - trailing `and` + phone digits name extraction regression
+- Verification:
+  - `cd services/backend && pytest -q tests/test_state_controller.py tests/test_agent_runtime.py tests/test_tts_voice_registry.py`
+  - Result: `55 passed`
+
 ## 2026-03-27 — fsm-build branch (0.8 confirmation/readback polish pass)
 
 - Investigated `logs/working-logs-0.8.md` and fixed S6 confirmation-loop issues:

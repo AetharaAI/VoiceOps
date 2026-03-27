@@ -373,14 +373,15 @@ class StateController:
 
         state.asr_listening = False
         state.silence_deadline = None
-        state.silence_retry_count = 0
-        state.last_recovery_prompt = ''
-        state.empty_transcript_count = 0
-        state.caller_turns += 1
 
         if not text or not text.strip():
             await self._handle_empty_transcript(state, publisher)
             return
+
+        state.silence_retry_count = 0
+        state.last_recovery_prompt = ''
+        state.empty_transcript_count = 0
+        state.caller_turns += 1
 
         # ── Greeting-state transition: first thing caller says after greeting
         # We need to move out of S1 before processing the transcript.
@@ -549,6 +550,14 @@ class StateController:
             if state.last_listen_started_at is not None
             else None
         )
+
+        # In confirmation state, avoid repeating the same yes/no prompt back-to-back.
+        if (
+            state.current_state == 'S6'
+            and state.last_recovery_prompt == self._confirmation_retry_prompt()
+        ):
+            await self._emit_asr_start_listen(state, publisher)
+            return
 
         # First quick empty result is usually edge/noise; restart listen silently
         # instead of immediately interrupting the caller with another prompt.

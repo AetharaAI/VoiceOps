@@ -15,7 +15,7 @@ ESCALATION_KEYWORDS = {'lawyer', 'sue', 'cancel now', 'human', 'manager', 'angry
 GENERIC_NOISE = {'yes', 'yeah', 'yep', 'no', 'nope', 'hello', 'hi', 'okay', 'ok', 'sure'}
 NAME_NOISE_WORDS = {
     'my', 'name', 'is', 'this', 'i', 'am', "i'm", 'it', "it's",
-    'uh', 'um', 'hmm', 'well', 'why', 'like', 'so', 'just',
+    'uh', 'um', 'hmm', 'well', 'why', 'like', 'so', 'just', 'and',
 }
 NAME_PREFIX_PATTERN = re.compile(r'^(my name is|name is|this is|i am|i\'m|it is|it\'s)\s+', re.IGNORECASE)
 ISSUE_PREFIX_PATTERN = re.compile(

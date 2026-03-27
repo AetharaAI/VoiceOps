@@ -33,6 +33,10 @@
   - ASR transcripts are ignored in terminal states (`S7`, `Esc`) to prevent post-goodbye recovery prompts
   - callback readback in `S6` now formats 10-digit phone numbers as digit-by-digit speech-safe text
   - `organization`/company fields are now optional by default (can be re-required per-agent with `runtime.require_organization=true`)
+- Additional `0.9` mitigation (implemented on `2026-03-27`):
+  - empty ASR final transcripts no longer reset caller-progress counters (prevents confirmation-loop churn)
+  - S6 confirmation loop suppresses duplicate back-to-back yes/no retry prompts on repeated empty ASR finals
+  - noisy phrase name extraction now ignores trailing conjunction token (`and`) when mixed with phone digits
 - Voxtream2 TTS integration status (`2026-03-26`):
   - `voxtream2_realtime` is now available in VoiceOps UI TTS model dropdowns (agents, inbound builder, outbound builder)
   - as of `2026-03-27`, Voxtream2 voice options are sourced from Studio registry (`/api/v1/tts/studio/voices`, tenant `default`) and filtered by `runtime_target=voxtream2_realtime` with required `reference_audio_path`

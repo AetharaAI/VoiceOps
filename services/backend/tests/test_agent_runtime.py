@@ -166,6 +166,10 @@ def test_extract_name_handles_noisy_phrase() -> None:
     assert agent_runtime._extract_name('Why, Mary,') == 'Mary'
 
 
+def test_extract_name_ignores_trailing_and_after_last_name() -> None:
+    assert agent_runtime._extract_name('Gibson and 812-363-2424') == 'Gibson'
+
+
 def test_missing_required_fields_skips_organization_by_default() -> None:
     agent = _make_agent(
         {
