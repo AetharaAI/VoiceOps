@@ -6,7 +6,7 @@ export const TTS_MODEL_OPTIONS = [
   { id: 'qwen_voice_design', label: 'Qwen Voice Design', provider: 'aether_voice' }
 ];
 
-const QWEN_PROVIDER_MODELS = ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design', 'voxtream2_realtime'];
+const QWEN_PROVIDER_MODELS = ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'];
 
 export const DEFAULT_VOICE_OPTIONS = [
   { id: 'af_bella', label: 'Bella', family: 'kokoro_realtime', gender: 'female', style_tag: 'warm', provider: 'aether_voice', models: ['kokoro_realtime'], is_default: true },

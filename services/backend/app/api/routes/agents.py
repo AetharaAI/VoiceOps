@@ -11,7 +11,11 @@ from app.db.session import get_db
 from app.models.models import Agent, UserRole
 from app.schemas.agent import AgentCreate, AgentResponse, AgentUpdateConfig, TTSVoiceOption
 from app.services.audit.service import audit_log
-from app.services.tts.voice_registry import list_tts_voices
+from app.services.tts.voice_registry import (
+    fetch_voxtream2_studio_voices,
+    list_tts_voices,
+    merge_tts_voices,
+)
 
 router = APIRouter(tags=['agents'])
 
@@ -132,7 +136,10 @@ async def list_supported_tts_voices(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[TTSVoiceOption]:
     _ = current_user
-    return [TTSVoiceOption(**voice) for voice in list_tts_voices()]
+    base_voices = list_tts_voices()
+    studio_voices = await fetch_voxtream2_studio_voices()
+    merged = merge_tts_voices(base_voices, studio_voices)
+    return [TTSVoiceOption(**voice) for voice in merged]
 
 
 @router.get('/llm/models', response_model=list[str])

@@ -12,7 +12,7 @@ const TTS_MODEL_OPTIONS = [
   { id: 'qwen_voice_design', label: 'Qwen Voice Design', provider: 'aether_voice' }
 ];
 const CUSTOM_TTS_MODEL_OPTION = { id: '__custom__', label: 'Custom TTS Model' };
-const QWEN_PROVIDER_MODELS = ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design', 'voxtream2_realtime'];
+const QWEN_PROVIDER_MODELS = ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'];
 
 const DEFAULT_VOICE_OPTIONS = [
   {

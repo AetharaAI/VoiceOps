@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+import httpx
 
 from app.core.config import get_settings
 
+logger = logging.getLogger(__name__)
 
 DEFAULT_TTS_PROVIDER = 'aether_voice'
-QWEN_TTS_MODELS = ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design', 'voxtream2_realtime']
+QWEN_TTS_MODELS = ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design']
+VOXTREAM2_RUNTIME_TARGET = 'voxtream2_realtime'
+STUDIO_TENANT_HEADER_VALUE = 'default'
 
 KOKORO_TTS_VOICES = [
     {
@@ -208,3 +214,81 @@ def list_tts_voices() -> list[dict[str, Any]]:
             }
         )
     return voices
+
+
+def extract_voxtream2_studio_voices(payload: Any) -> list[dict[str, Any]]:
+    voices = payload.get('voices') if isinstance(payload, dict) else None
+    if not isinstance(voices, list):
+        return []
+
+    extracted: list[dict[str, Any]] = []
+    for raw in voices:
+        if not isinstance(raw, dict):
+            continue
+        runtime_target = str(raw.get('runtime_target') or '').strip()
+        if runtime_target != VOXTREAM2_RUNTIME_TARGET:
+            continue
+
+        voice_id = str(raw.get('voice_id') or '').strip()
+        label = str(raw.get('display_name') or voice_id).strip()
+        reference_audio_path = raw.get('reference_audio_path')
+        if not voice_id or not label or not reference_audio_path:
+            continue
+
+        extracted.append(
+            {
+                'id': voice_id,
+                'label': label,
+                'gender': str(raw.get('gender') or 'unknown'),
+                'style_tag': str(raw.get('style_tag') or 'clone'),
+                'family': VOXTREAM2_RUNTIME_TARGET,
+                'provider': DEFAULT_TTS_PROVIDER,
+                'models': [VOXTREAM2_RUNTIME_TARGET],
+                'reference_audio_path': str(reference_audio_path),
+                'is_default': False,
+            }
+        )
+    return extracted
+
+
+def merge_tts_voices(base: list[dict[str, Any]], extra: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged = list(base)
+    existing_ids = {voice.get('id') for voice in merged}
+    for voice in extra:
+        vid = voice.get('id')
+        if not vid or vid in existing_ids:
+            continue
+        merged.append(voice)
+        existing_ids.add(vid)
+    return merged
+
+
+def _aether_voice_auth_headers() -> dict[str, str]:
+    settings = get_settings()
+    headers: dict[str, str] = {}
+    if settings.aether_voice_api_key:
+        headers['X-API-Key'] = settings.aether_voice_api_key
+    elif settings.aether_voice_bearer_token:
+        headers['Authorization'] = f'Bearer {settings.aether_voice_bearer_token}'
+    return headers
+
+
+async def fetch_voxtream2_studio_voices() -> list[dict[str, Any]]:
+    settings = get_settings()
+    url = f"{settings.aether_voice_http_base.rstrip('/')}/v1/tts/studio/voices"
+    headers = {
+        **_aether_voice_auth_headers(),
+        # Studio registry seeding lives under tenant `default`.
+        'X-Tenant-Id': STUDIO_TENANT_HEADER_VALUE,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            return extract_voxtream2_studio_voices(response.json())
+    except Exception as exc:
+        logger.warning(
+            'tts.voice_registry.studio_fetch_failed',
+            extra={'correlation_id': '', 'tenant_id': '', 'call_id': '', 'error': str(exc)},
+        )
+        return []

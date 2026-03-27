@@ -43,4 +43,5 @@ class TTSVoiceOption(BaseModel):
     family: str
     provider: str
     models: list[str] = Field(default_factory=list)
+    reference_audio_path: str | None = None
     is_default: bool = False

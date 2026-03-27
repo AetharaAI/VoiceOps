@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-03-27 — fsm-build branch (Voxtream2 Studio registry voice source fix)
+
+- Implemented Voxtream2 voice loading from the Voice Substrate Studio registry (cross-VM source of truth):
+  - `services/backend/app/services/tts/voice_registry.py`
+    - fetches from `{AETHER_VOICE_HTTP_BASE}/v1/tts/studio/voices`
+    - sends `X-Tenant-Id: default`
+    - filters to `runtime_target == voxtream2_realtime`
+    - requires non-null `reference_audio_path`
+    - maps registry entries to VoiceOps voice option shape
+- Updated `/api/v1/agents/tts/voices` to merge static registry + Studio Voxtream2 voices:
+  - `services/backend/app/api/routes/agents.py`
+- Extended API schema to expose Voxtream2 reference audio metadata:
+  - `services/backend/app/schemas/agent.py` (`reference_audio_path`)
+- Removed Qwen/Voxtream2 compatibility bleed-through in frontend defaults:
+  - `services/frontend/lib/operator-builder.js`
+  - `services/frontend/app/agents/page.js`
+  - Qwen preset voices no longer advertise `voxtream2_realtime` support
+- Added/updated backend tests:
+  - `services/backend/tests/test_tts_voice_registry.py`
+    - runtime-target filtering
+    - reference-audio required behavior
+    - merge de-duplication
+- Verification:
+  - `cd services/backend && pytest -q tests/test_tts_voice_registry.py tests/test_agent_runtime.py tests/test_state_controller.py`
+  - Result: `48 passed`
+
 ## 2026-03-26 — fsm-build branch (Voxtream2 option integration pass)
 
 - Added `voxtream2_realtime` to backend TTS voice/model compatibility registry:

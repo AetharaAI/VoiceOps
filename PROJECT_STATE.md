@@ -35,7 +35,8 @@
   - `organization`/company fields are now optional by default (can be re-required per-agent with `runtime.require_organization=true`)
 - Voxtream2 TTS integration status (`2026-03-26`):
   - `voxtream2_realtime` is now available in VoiceOps UI TTS model dropdowns (agents, inbound builder, outbound builder)
-  - backend voice registry compatibility updated so provider-backed voice options can be selected with `voxtream2_realtime`
+  - as of `2026-03-27`, Voxtream2 voice options are sourced from Studio registry (`/api/v1/tts/studio/voices`, tenant `default`) and filtered by `runtime_target=voxtream2_realtime` with required `reference_audio_path`
+  - Qwen preset voices are no longer eligible for `voxtream2_realtime` unless a registry voice explicitly advertises that runtime target
   - production telephony baseline remains `kokoro_realtime` until flow/perf qualification completes
 
 ## Deployment Mode (Current)
