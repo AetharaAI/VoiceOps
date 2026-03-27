@@ -346,6 +346,11 @@ class StateController:
         self, state: CallFSMState, base: FSMEventBase, publisher: StreamPublisher
     ) -> None:
         """Caller spoke — advance the FSM."""
+        if state.current_state in TERMINAL_STATES:
+            state.asr_listening = False
+            state.silence_deadline = None
+            return
+
         payload = base.payload
         text = (
             payload.get('text', '')
@@ -529,6 +534,9 @@ class StateController:
         self, state: CallFSMState, publisher: StreamPublisher
     ) -> None:
         """Empty or noise-only transcript."""
+        if state.current_state in TERMINAL_STATES:
+            return
+
         state.empty_transcript_count += 1
         listen_elapsed = (
             time.monotonic() - state.last_listen_started_at
@@ -618,8 +626,9 @@ class StateController:
         self, state: CallFSMState, publisher: StreamPublisher
     ) -> None:
         """Build and emit the readback confirmation prompt."""
+        state.last_prompted_field = None
         parts = [
-            f'{k.replace("_", " ").title()}: {v}'
+            f'{k.replace("_", " ").title()}: {self._format_field_for_readback(k, v)}'
             for k, v in state.collected_fields.items()
             if v
         ]
@@ -732,6 +741,18 @@ class StateController:
         if field_name in {'name', 'full_name', 'customer_name'}:
             timeout = max(timeout, 12.0)
         return timeout
+
+    def _format_field_for_readback(self, field_name: str, value: str) -> str:
+        if not value:
+            return value
+        lowered = field_name.lower()
+        if lowered in {'phone', 'phone_number', 'callback_number', 'callback_phone', 'best_callback_number'}:
+            digits = ''.join(ch for ch in value if ch.isdigit())
+            if len(digits) == 10:
+                return ' '.join(digits)
+            if len(digits) == 11 and digits.startswith('1'):
+                return '+1 ' + ' '.join(digits[1:])
+        return value
 
     # ------------------------------------------------------------------
     # Observability: emit llm.extract + llm.extracted for audit trail

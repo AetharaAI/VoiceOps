@@ -166,6 +166,31 @@ def test_extract_name_handles_noisy_phrase() -> None:
     assert agent_runtime._extract_name('Why, Mary,') == 'Mary'
 
 
+def test_missing_required_fields_skips_organization_by_default() -> None:
+    agent = _make_agent(
+        {
+            'name': {'prompt': 'Name?'},
+            'organization': {'prompt': 'Organization?'},
+        }
+    )
+
+    missing = agent_runtime.missing_required_fields(agent=agent, collected_fields={})
+    assert missing == ['name']
+
+
+def test_missing_required_fields_can_require_organization_when_enabled() -> None:
+    agent = _make_agent(
+        {
+            'name': {'prompt': 'Name?'},
+            'organization': {'prompt': 'Organization?'},
+        }
+    )
+    agent.policy_config = {'runtime': {'require_organization': True}}
+
+    missing = agent_runtime.missing_required_fields(agent=agent, collected_fields={})
+    assert missing == ['name', 'organization']
+
+
 @pytest.mark.asyncio
 async def test_generate_response_sends_enable_thinking_in_extra_body(monkeypatch) -> None:
     agent = _make_agent()

@@ -29,6 +29,10 @@
   - name capture listen floor set to `12s`
   - required-field extraction is now constrained to the currently prompted field to avoid noisy cross-field captures
   - noisy short-phrase name fallback improved for real caller phrasing
+- Additional `0.7` mitigation (implemented on `2026-03-26`):
+  - ASR transcripts are ignored in terminal states (`S7`, `Esc`) to prevent post-goodbye recovery prompts
+  - callback readback in `S6` now formats 10-digit phone numbers as digit-by-digit speech-safe text
+  - `organization`/company fields are now optional by default (can be re-required per-agent with `runtime.require_organization=true`)
 
 ## Deployment Mode (Current)
 - Runtime: Docker Compose (`docker-compose.yml`) on CPU gateway node.
@@ -110,6 +114,7 @@ Phase 3 (FSM Pipeline) is **COMPLETE** on the `fsm-build` branch. All 84 tests p
    - live LLM phone prompt tightened to reduce filler/chuckle-like outputs and trailing fragments
    - partial-transcript heartbeat and dynamic listen timeout behavior validated against long phone-number capture turns
    - first-turn empty transcript behavior validated to avoid immediate talk-over recovery prompts
+   - terminal-state transcript handling validated to prevent post-close prompt regressions
 3. Wire LLM Consumer into `handle_ws()` (Phase 4 LLM decoupling).
 4. Add end-to-end call smoke-test automation and transcript validation.
 5. Move frontend from `next dev` container to production build/start path.

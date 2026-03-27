@@ -373,6 +373,26 @@ def test_asr_partial_transcript_extends_deadline_without_agent_turn():
     assert len(publisher.events_of_type('tts.speak')) == 0
 
 
+def test_asr_transcript_ignored_in_terminal_state():
+    """Late transcripts must be ignored once the FSM is in S7/Esc."""
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S7'
+    state.asr_listening = True
+    state.silence_deadline = 9999.0
+    publisher = _FakePublisher()
+
+    async def run():
+        event = _make_transcript_event(state, text='yes')
+        await ctrl._on_asr_transcript(state, event, publisher)
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+    assert state.asr_listening is False
+    assert state.silence_deadline is None
+    assert len(publisher.events_of_type('tts.speak')) == 0
+
+
 def test_asr_transcript_increments_caller_turns():
     """caller_turns is incremented for each non-empty transcript."""
     ctrl = StateController()
@@ -524,6 +544,28 @@ def test_silence_timeout_ignored_when_not_listening():
 
     assert len(publisher.published) == 0
     assert state.silence_retry_count == 0  # unchanged
+
+
+def test_enter_s6_readback_formats_callback_number_as_digits():
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S6'
+    state.last_prompted_field = 'callback_number'
+    state.collected_fields = {
+        'name': 'Mary',
+        'callback_number': '8123632424',
+    }
+    publisher = _FakePublisher()
+
+    async def run():
+        await ctrl._enter_s6_tts(state, publisher)
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+    tts = publisher.last_of_type('tts.speak')
+    assert tts is not None
+    assert '8 1 2 3 6 3 2 4 2 4' in tts.payload.text
+    assert state.last_prompted_field is None
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-03-26 — fsm-build branch (0.7 readback/terminal-state fix pass)
+
+- Investigated `logs/working-logs-0.7.md` and fixed three concrete issues:
+  - late `asr.transcript` events were still being handled after transition to `S7`, causing extra recovery prompts after goodbye
+  - readback in `S6` could speak callback numbers as large-magnitude numbers instead of digit-by-digit
+  - `organization` behaved as implicitly required in intake flow, creating noisy captures and awkward readback content
+- Updated `services/backend/app/services/state_controller/controller.py`:
+  - ignore ASR transcripts in terminal states (`S7`, `Esc`)
+  - guard `_handle_empty_transcript()` in terminal states
+  - clear `last_prompted_field` when entering `S6` confirmation/readback
+  - format callback numbers for readback as spaced digits (e.g. `8 1 2 3 6 3 2 4 2 4`)
+- Updated `services/backend/app/services/agent_runtime/runtime.py`:
+  - `missing_required_fields()` now treats organization/company fields as optional by default
+  - can be re-enabled as required with `policy_config.runtime.require_organization=true`
+- Added tests:
+  - terminal-state transcript ignore
+  - S6 readback callback digit formatting
+  - optional-organization missing-field behavior + runtime override behavior
+- Verification:
+  - `cd services/backend && pytest -q tests/test_agent_runtime.py tests/test_state_controller.py tests/test_fsm_consumers.py tests/test_stream_ingester.py tests/test_stream_event_schemas.py`
+  - Result: `108 passed`
+
 ## 2026-03-26 — fsm-build branch (0.6 first-turn overlap fix pass)
 
 - Investigated `logs/working-logs-0.6.md` and found two first-turn issues:

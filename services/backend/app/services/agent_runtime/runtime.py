@@ -145,7 +145,17 @@ class AgentRuntime:
 
     def missing_required_fields(self, *, agent: Agent, collected_fields: dict) -> list[str]:
         required_fields = agent.required_fields or {}
-        return [field_name for field_name in required_fields.keys() if not collected_fields.get(field_name)]
+        runtime = self.runtime_config(agent=agent)
+        require_organization = bool(runtime.get('require_organization', False))
+        optional_org_fields = {'organization', 'company', 'company_name', 'business_name'}
+
+        missing: list[str] = []
+        for field_name in required_fields.keys():
+            if field_name.lower() in optional_org_fields and not require_organization:
+                continue
+            if not collected_fields.get(field_name):
+                missing.append(field_name)
+        return missing
 
     def build_opening_prompt(self, *, agent: Agent, collected_fields: dict) -> AgentTurn:
         missing_fields = self.missing_required_fields(agent=agent, collected_fields=collected_fields)
