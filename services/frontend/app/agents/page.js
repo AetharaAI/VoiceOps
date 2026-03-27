@@ -6,11 +6,13 @@ import { api } from '../../lib/api';
 
 const TTS_MODEL_OPTIONS = [
   { id: 'kokoro_realtime', label: 'Kokoro Realtime', provider: 'aether_voice' },
+  { id: 'voxtream2_realtime', label: 'Voxtream2 Realtime', provider: 'aether_voice' },
   { id: 'qwen_customvoice', label: 'Qwen Custom Voice Batch', provider: 'aether_voice' },
   { id: 'qwen_customvoice_streaming', label: 'Qwen Custom Voice Streaming', provider: 'aether_voice' },
   { id: 'qwen_voice_design', label: 'Qwen Voice Design', provider: 'aether_voice' }
 ];
 const CUSTOM_TTS_MODEL_OPTION = { id: '__custom__', label: 'Custom TTS Model' };
+const QWEN_PROVIDER_MODELS = ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design', 'voxtream2_realtime'];
 
 const DEFAULT_VOICE_OPTIONS = [
   {
@@ -130,7 +132,7 @@ const DEFAULT_VOICE_OPTIONS = [
     gender: 'male',
     style_tag: 'clear',
     provider: 'aether_voice',
-    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    models: QWEN_PROVIDER_MODELS,
     is_default: false
   },
   {
@@ -140,7 +142,7 @@ const DEFAULT_VOICE_OPTIONS = [
     gender: 'male',
     style_tag: 'steady',
     provider: 'aether_voice',
-    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    models: QWEN_PROVIDER_MODELS,
     is_default: false
   },
   {
@@ -150,7 +152,7 @@ const DEFAULT_VOICE_OPTIONS = [
     gender: 'female',
     style_tag: 'calm',
     provider: 'aether_voice',
-    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    models: QWEN_PROVIDER_MODELS,
     is_default: false
   },
   {
@@ -160,7 +162,7 @@ const DEFAULT_VOICE_OPTIONS = [
     gender: 'female',
     style_tag: 'polished',
     provider: 'aether_voice',
-    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    models: QWEN_PROVIDER_MODELS,
     is_default: false
   },
   {
@@ -170,7 +172,7 @@ const DEFAULT_VOICE_OPTIONS = [
     gender: 'male',
     style_tag: 'warm',
     provider: 'aether_voice',
-    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    models: QWEN_PROVIDER_MODELS,
     is_default: false
   },
   {
@@ -180,7 +182,7 @@ const DEFAULT_VOICE_OPTIONS = [
     gender: 'female',
     style_tag: 'bright',
     provider: 'aether_voice',
-    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    models: QWEN_PROVIDER_MODELS,
     is_default: false
   },
   {
@@ -190,7 +192,7 @@ const DEFAULT_VOICE_OPTIONS = [
     gender: 'male',
     style_tag: 'neutral',
     provider: 'aether_voice',
-    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    models: QWEN_PROVIDER_MODELS,
     is_default: false
   },
   {
@@ -200,7 +202,7 @@ const DEFAULT_VOICE_OPTIONS = [
     gender: 'male',
     style_tag: 'confident',
     provider: 'aether_voice',
-    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    models: QWEN_PROVIDER_MODELS,
     is_default: false
   },
   {
@@ -210,7 +212,7 @@ const DEFAULT_VOICE_OPTIONS = [
     gender: 'female',
     style_tag: 'soft',
     provider: 'aether_voice',
-    models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'],
+    models: QWEN_PROVIDER_MODELS,
     is_default: false
   }
 ];

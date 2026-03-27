@@ -6,7 +6,7 @@ from app.core.config import get_settings
 
 
 DEFAULT_TTS_PROVIDER = 'aether_voice'
-QWEN_TTS_MODELS = ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design']
+QWEN_TTS_MODELS = ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design', 'voxtream2_realtime']
 
 KOKORO_TTS_VOICES = [
     {

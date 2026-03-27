@@ -33,5 +33,6 @@ def test_tts_voice_registry_exposes_full_inventory() -> None:
         'qwen_customvoice',
         'qwen_customvoice_streaming',
         'qwen_voice_design',
+        'voxtream2_realtime',
     ]
     assert any(voice['is_default'] for voice in voices)

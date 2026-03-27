@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-03-26 — fsm-build branch (Voxtream2 option integration pass)
+
+- Added `voxtream2_realtime` to backend TTS voice/model compatibility registry:
+  - `services/backend/app/services/tts/voice_registry.py`
+  - included in provider-backed Qwen/asset voice model compatibility set
+- Added `voxtream2_realtime` to frontend TTS model dropdown options used by inbound/outbound builders:
+  - `services/frontend/lib/operator-builder.js`
+- Added `voxtream2_realtime` to agent editor TTS model dropdown and aligned duplicated voice compatibility model set:
+  - `services/frontend/app/agents/page.js`
+- Updated backend registry test expectations:
+  - `services/backend/tests/test_tts_voice_registry.py`
+- Verification:
+  - `cd services/backend && pytest -q tests/test_tts_voice_registry.py tests/test_agent_runtime.py tests/test_state_controller.py`
+  - Result: `46 passed`
+
 ## 2026-03-26 — fsm-build branch (0.7 readback/terminal-state fix pass)
 
 - Investigated `logs/working-logs-0.7.md` and fixed three concrete issues:

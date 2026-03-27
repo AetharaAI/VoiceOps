@@ -1,9 +1,12 @@
 export const TTS_MODEL_OPTIONS = [
   { id: 'kokoro_realtime', label: 'Kokoro Realtime', provider: 'aether_voice' },
+  { id: 'voxtream2_realtime', label: 'Voxtream2 Realtime', provider: 'aether_voice' },
   { id: 'qwen_customvoice', label: 'Qwen Custom Voice Batch', provider: 'aether_voice' },
   { id: 'qwen_customvoice_streaming', label: 'Qwen Custom Voice Streaming', provider: 'aether_voice' },
   { id: 'qwen_voice_design', label: 'Qwen Voice Design', provider: 'aether_voice' }
 ];
+
+const QWEN_PROVIDER_MODELS = ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design', 'voxtream2_realtime'];
 
 export const DEFAULT_VOICE_OPTIONS = [
   { id: 'af_bella', label: 'Bella', family: 'kokoro_realtime', gender: 'female', style_tag: 'warm', provider: 'aether_voice', models: ['kokoro_realtime'], is_default: true },
@@ -11,9 +14,9 @@ export const DEFAULT_VOICE_OPTIONS = [
   { id: 'af_nicole', label: 'Nicole', family: 'kokoro_realtime', gender: 'female', style_tag: 'confident', provider: 'aether_voice', models: ['kokoro_realtime'], is_default: false },
   { id: 'af_sarah', label: 'Sarah', family: 'kokoro_realtime', gender: 'female', style_tag: 'clear', provider: 'aether_voice', models: ['kokoro_realtime'], is_default: false },
   { id: 'am_adam', label: 'Adam', family: 'kokoro_realtime', gender: 'male', style_tag: 'steady', provider: 'aether_voice', models: ['kokoro_realtime'], is_default: false },
-  { id: 'qwen_vivian', label: 'Vivian', family: 'qwen_customvoice', gender: 'female', style_tag: 'polished', provider: 'aether_voice', models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'], is_default: false },
-  { id: 'qwen_serena', label: 'Serena', family: 'qwen_customvoice', gender: 'female', style_tag: 'calm', provider: 'aether_voice', models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'], is_default: false },
-  { id: 'qwen_ryan', label: 'Ryan', family: 'qwen_customvoice', gender: 'male', style_tag: 'clear', provider: 'aether_voice', models: ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design'], is_default: false }
+  { id: 'qwen_vivian', label: 'Vivian', family: 'qwen_customvoice', gender: 'female', style_tag: 'polished', provider: 'aether_voice', models: QWEN_PROVIDER_MODELS, is_default: false },
+  { id: 'qwen_serena', label: 'Serena', family: 'qwen_customvoice', gender: 'female', style_tag: 'calm', provider: 'aether_voice', models: QWEN_PROVIDER_MODELS, is_default: false },
+  { id: 'qwen_ryan', label: 'Ryan', family: 'qwen_customvoice', gender: 'male', style_tag: 'clear', provider: 'aether_voice', models: QWEN_PROVIDER_MODELS, is_default: false }
 ];
 
 const CUSTOM_TTS_MODEL_OPTION = { id: '__custom__', label: 'Custom TTS Model' };

@@ -33,6 +33,10 @@
   - ASR transcripts are ignored in terminal states (`S7`, `Esc`) to prevent post-goodbye recovery prompts
   - callback readback in `S6` now formats 10-digit phone numbers as digit-by-digit speech-safe text
   - `organization`/company fields are now optional by default (can be re-required per-agent with `runtime.require_organization=true`)
+- Voxtream2 TTS integration status (`2026-03-26`):
+  - `voxtream2_realtime` is now available in VoiceOps UI TTS model dropdowns (agents, inbound builder, outbound builder)
+  - backend voice registry compatibility updated so provider-backed voice options can be selected with `voxtream2_realtime`
+  - production telephony baseline remains `kokoro_realtime` until flow/perf qualification completes
 
 ## Deployment Mode (Current)
 - Runtime: Docker Compose (`docker-compose.yml`) on CPU gateway node.
