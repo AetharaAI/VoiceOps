@@ -457,7 +457,7 @@ def test_asr_empty_transcript_emits_recovery_tts():
     state = _make_fsm_state()
     state.current_state = 'S2'
     state.asr_listening = True
-    state.last_listen_started_at = time.monotonic() - 3.0
+    state.last_listen_started_at = time.monotonic() - 5.0
     publisher = _FakePublisher()
 
     async def run():
@@ -508,6 +508,8 @@ def test_asr_empty_transcript_does_not_reset_empty_counter_or_increment_turns():
 
     assert state.empty_transcript_count == 2
     assert state.caller_turns == 0
+    assert len(publisher.events_of_type('tts.speak')) == 0
+    assert len(publisher.events_of_type('asr.start_listen')) == 1
 
 
 def test_s6_ignores_duplicate_confirmation_retry_prompt_on_empty_transcript():

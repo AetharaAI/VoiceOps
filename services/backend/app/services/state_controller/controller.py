@@ -74,6 +74,8 @@ logger = get_logger(__name__)
 MAX_FIELD_RETRIES = 3       # per-field: after this many failures, skip
 MAX_SILENCE_RETRIES = 2     # global: after this many silent turns, escalate
 STREAM_POLL_BLOCK_MS = 500  # XREADGROUP block timeout
+EARLY_EMPTY_GRACE_SECONDS = 4.0
+MAX_EARLY_EMPTY_SILENT_RETRIES = 2
 
 TERMINAL_STATES = frozenset({'S7', 'Esc'})
 S6_CONFIRMATION_TIMEOUT_FLOOR = 14.0
@@ -559,9 +561,12 @@ class StateController:
             await self._emit_asr_start_listen(state, publisher)
             return
 
-        # First quick empty result is usually edge/noise; restart listen silently
-        # instead of immediately interrupting the caller with another prompt.
-        if state.empty_transcript_count == 1 and (listen_elapsed is None or listen_elapsed < 2.5):
+        # Quick empty finals often come from edge VAD/noise. Keep listening for
+        # a short grace window to avoid talking over the caller.
+        if (
+            (listen_elapsed is None or listen_elapsed < EARLY_EMPTY_GRACE_SECONDS)
+            and state.empty_transcript_count <= MAX_EARLY_EMPTY_SILENT_RETRIES
+        ):
             await self._emit_asr_start_listen(state, publisher)
             return
 
