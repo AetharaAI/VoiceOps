@@ -35,6 +35,7 @@ observability and audit. The LLM Consumer TODO will offload this in Phase 4.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -82,6 +83,40 @@ S6_CONFIRMATION_TIMEOUT_FLOOR = 14.0
 
 # Events the State Controller should skip when consuming its own stream
 _SKIP_EVENT_TYPES = STATE_CONTROLLER_COMMANDS | {'llm.extract', 'llm.classify'}
+
+CONFIRMATION_AFFIRM_PHRASES = (
+    'yes',
+    'yeah',
+    'yep',
+    'correct',
+    "that's correct",
+    'that is correct',
+    "that's right",
+    'that is right',
+    'sounds good',
+    'looks good',
+    'all good',
+    'good to go',
+    'that works',
+    'that is fine',
+    "that's fine",
+    'everything is correct',
+    'everything looks correct',
+    'everything sounds right',
+)
+
+CONFIRMATION_DENY_PHRASES = (
+    'no',
+    'nope',
+    'wrong',
+    'incorrect',
+    'not right',
+    'not correct',
+    'change',
+    'different',
+    'fix',
+    'update',
+)
 
 
 # ---------------------------------------------------------------------------
@@ -500,11 +535,9 @@ class StateController:
         text: str,
     ) -> None:
         """Parse caller yes/no in S6 (readback confirmation)."""
-        lowered = text.lower()
-        affirm = {'yes', 'yeah', 'yep', 'correct', 'right', 'sure', 'confirm', "that's right"}
-        deny = {'no', 'nope', 'wrong', 'incorrect', 'not right', 'change', 'different'}
+        confirmation = self._classify_confirmation_response(text)
 
-        if any(w in lowered for w in affirm):
+        if confirmation == 'affirm':
             closing = (
                 (state.agent.policy_config or {}).get('runtime', {}).get('closing_message')
                 or 'Great, we have everything we need. Thank you, and have a wonderful day!'
@@ -514,7 +547,7 @@ class StateController:
             await self._emit_tts(state, publisher, text=closing,
                                  response_source='scripted_goodbye')
 
-        elif any(w in lowered for w in deny):
+        elif confirmation == 'deny':
             retries = state.retry_counts.get('confirmation', 0) + 1
             state.retry_counts['confirmation'] = retries
             if retries >= MAX_FIELD_RETRIES:
@@ -781,6 +814,22 @@ class StateController:
 
     def _confirmation_retry_prompt(self) -> str:
         return 'Please say yes if everything is correct, or no if you want to change something.'
+
+    def _classify_confirmation_response(self, text: str) -> str | None:
+        """Classify S6 confirmation text as affirm/deny/unknown.
+
+        Deny is checked first to avoid false-positive affirm matches in mixed
+        phrases like "yeah, but I need to change one thing".
+        """
+        normalized = re.sub(r'[^a-z0-9\s]', ' ', (text or '').lower())
+        normalized = re.sub(r'\s+', ' ', normalized).strip()
+        if not normalized:
+            return None
+        if any(phrase in normalized for phrase in CONFIRMATION_DENY_PHRASES):
+            return 'deny'
+        if any(phrase in normalized for phrase in CONFIRMATION_AFFIRM_PHRASES):
+            return 'affirm'
+        return None
 
     def _format_field_for_readback(self, field_name: str, value: str) -> str:
         if not value:

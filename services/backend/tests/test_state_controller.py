@@ -725,6 +725,25 @@ def test_confirmation_yes_transitions_to_s7():
     assert tts.payload.response_source == 'scripted_goodbye'
 
 
+def test_confirmation_natural_affirm_phrase_transitions_to_s7():
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S6'
+    state.asr_listening = True
+    publisher = _FakePublisher()
+
+    async def run():
+        event = _make_transcript_event(state, text='Yeah everything looks good to me')
+        await ctrl._on_asr_transcript(state, event, publisher)
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+    assert state.current_state == 'S7'
+    tts = publisher.last_of_type('tts.speak')
+    assert tts is not None
+    assert tts.payload.response_source == 'scripted_goodbye'
+
+
 def test_confirmation_no_triggers_retry():
     """Saying 'no' in S6 emits correction TTS without changing state."""
     ctrl = StateController()
@@ -742,6 +761,25 @@ def test_confirmation_no_triggers_retry():
     # Still in S6 (not escalated on first denial)
     assert state.current_state == 'S6'
     assert publisher.last_of_type('tts.speak') is not None
+
+
+def test_confirmation_mixed_response_prefers_deny():
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S6'
+    state.asr_listening = True
+    publisher = _FakePublisher()
+
+    async def run():
+        event = _make_transcript_event(state, text='Yeah but I need to change one thing')
+        await ctrl._on_asr_transcript(state, event, publisher)
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+    assert state.current_state == 'S6'
+    tts = publisher.last_of_type('tts.speak')
+    assert tts is not None
+    assert tts.payload.response_source == 'confirmation_correction'
 
 
 def test_confirmation_unclear_uses_yes_no_retry_prompt():
