@@ -457,7 +457,7 @@ def test_asr_empty_transcript_emits_recovery_tts():
     state = _make_fsm_state()
     state.current_state = 'S2'
     state.asr_listening = True
-    state.last_listen_started_at = time.monotonic() - 5.0
+    state.last_listen_started_at = time.monotonic() - 9.0
     publisher = _FakePublisher()
 
     async def run():

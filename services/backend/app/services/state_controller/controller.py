@@ -74,8 +74,8 @@ logger = get_logger(__name__)
 MAX_FIELD_RETRIES = 3       # per-field: after this many failures, skip
 MAX_SILENCE_RETRIES = 2     # global: after this many silent turns, escalate
 STREAM_POLL_BLOCK_MS = 500  # XREADGROUP block timeout
-EARLY_EMPTY_GRACE_SECONDS = 4.0
-MAX_EARLY_EMPTY_SILENT_RETRIES = 2
+EARLY_EMPTY_GRACE_SECONDS = 8.0
+MAX_EARLY_EMPTY_SILENT_RETRIES = 5
 
 TERMINAL_STATES = frozenset({'S7', 'Esc'})
 S6_CONFIRMATION_TIMEOUT_FLOOR = 14.0
