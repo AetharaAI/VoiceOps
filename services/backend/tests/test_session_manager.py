@@ -15,6 +15,7 @@ if 'webrtcvad' not in sys.modules:
     webrtcvad_module.Vad = Vad
     sys.modules['webrtcvad'] = webrtcvad_module
 
+from app.services.agent_runtime.runtime import AgentTurn
 from app.services.realtime.session_manager import VoiceSession, VoiceSessionManager
 from app.services.telephony.telemetry import CallTelemetry
 from app.models.models import Agent, Call, CallDirection, CallStatus
@@ -181,3 +182,20 @@ def test_build_operator_artifacts_uses_inbound_builder_config() -> None:
     assert artifacts['extraction']['crm_mapping'] == {'contact': ['name', 'callback_number']}
     assert artifacts['action']['action_config'] == {'schedule_appointment': True, 'send_sms': True}
     assert artifacts['action']['follow_up_needed'] is True
+
+
+def test_resolve_transfer_action_from_tool_calls() -> None:
+    manager = VoiceSessionManager()
+    turn = AgentTurn(
+        response_text='Transferring you now.',
+        should_escalate=True,
+        tool_calls=[{'action': 'transfer_call', 'target': 'Front Desk', 'reason': 'caller_requested_human'}],
+    )
+
+    action = manager._resolve_transfer_action(turn=turn)
+
+    assert action == {
+        'action': 'transfer_call',
+        'target': 'Front Desk',
+        'reason': 'caller_requested_human',
+    }

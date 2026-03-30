@@ -76,6 +76,10 @@ CONNECTION_CHECK_PROMPTS = [
     "I'm having trouble hearing you clearly on this line.",
     'The audio is still breaking up on my end.',
 ]
+DEFAULT_HUMAN_TRANSFER_KEYWORDS = ['human', 'representative', 'real person', 'operator', 'manager', 'sales', 'transfer me']
+HUMAN_TRANSFER_TRIGGER_MODES = {'explicit_only', 'keyword_only', 'explicit_or_keyword'}
+HUMAN_TRANSFER_DESTINATION_TYPES = {'phone_number', 'sip', 'twilio_client'}
+HUMAN_TRANSFER_FALLBACKS = {'return_to_ai', 'voicemail', 'callback_capture', 'end_call'}
 
 
 @dataclass
@@ -124,6 +128,89 @@ class AgentRuntime:
     def opening_greeting_for_agent(self, *, agent: Agent) -> str:
         greeting = self.runtime_config(agent=agent).get('opening_greeting', '')
         return greeting.strip() if isinstance(greeting, str) else ''
+
+    def inbound_builder_config(self, *, agent: Agent) -> dict:
+        workflow = agent.workflow_dsl or {}
+        if not isinstance(workflow, dict):
+            return {}
+        builder = workflow.get('inbound_builder') or {}
+        return builder if isinstance(builder, dict) else {}
+
+    def human_transfer_config_for_agent(self, *, agent: Agent) -> dict:
+        transfer = self.inbound_builder_config(agent=agent).get('human_transfer') or {}
+        if not isinstance(transfer, dict):
+            transfer = {}
+
+        trigger_mode = transfer.get('trigger_mode')
+        if trigger_mode not in HUMAN_TRANSFER_TRIGGER_MODES:
+            trigger_mode = 'explicit_or_keyword'
+
+        destination_type = transfer.get('destination_type')
+        if destination_type not in HUMAN_TRANSFER_DESTINATION_TYPES:
+            destination_type = 'phone_number'
+
+        fallback = transfer.get('no_answer_fallback')
+        if fallback not in HUMAN_TRANSFER_FALLBACKS:
+            fallback = 'return_to_ai'
+
+        keywords = transfer.get('keywords')
+        if not isinstance(keywords, list):
+            keywords = list(DEFAULT_HUMAN_TRANSFER_KEYWORDS)
+        else:
+            keywords = [str(keyword).strip() for keyword in keywords if str(keyword).strip()]
+            if not keywords:
+                keywords = list(DEFAULT_HUMAN_TRANSFER_KEYWORDS)
+
+        ring_timeout = transfer.get('ring_timeout_seconds', 20)
+        try:
+            ring_timeout_int = int(ring_timeout)
+        except (TypeError, ValueError):
+            ring_timeout_int = 20
+        ring_timeout_int = max(5, min(120, ring_timeout_int))
+
+        return {
+            'enabled': bool(transfer.get('enabled', False)),
+            'trigger_mode': trigger_mode,
+            'keywords': keywords,
+            'destination_type': destination_type,
+            'destination': str(transfer.get('destination') or '').strip(),
+            'label': str(transfer.get('label') or 'Front Desk').strip() or 'Front Desk',
+            'confirmation_message': (
+                str(transfer.get('confirmation_message') or '').strip()
+                or 'Absolutely. I will transfer you to a team member now.'
+            ),
+            'no_answer_fallback': fallback,
+            'ring_timeout_seconds': ring_timeout_int,
+        }
+
+    def _human_transfer_keyword_match(self, *, user_text: str, keywords: list[str]) -> str | None:
+        lowered = user_text.lower()
+        for keyword in keywords:
+            if keyword.lower() in lowered:
+                return keyword
+        return None
+
+    def _parse_transfer_action_contract(self, model_text: str) -> dict | None:
+        cleaned = model_text.strip()
+        if not cleaned.startswith('{') or not cleaned.endswith('}'):
+            return None
+        try:
+            import json
+
+            payload = json.loads(cleaned)
+        except Exception:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        if payload.get('action') != 'transfer_call':
+            return None
+        target = str(payload.get('target') or '').strip()
+        reason = str(payload.get('reason') or '').strip()
+        return {
+            'action': 'transfer_call',
+            'target': target,
+            'reason': reason or 'caller_requested_human',
+        }
 
     def llm_request_overrides_for_agent(self, *, agent: Agent) -> dict:
         runtime = self.runtime_config(agent=agent)
@@ -200,8 +287,24 @@ class AgentRuntime:
         missing_fields: list[str],
         prompted_field: str | None,
         detected_intent: str,
+        human_transfer: dict | None = None,
     ) -> str:
         active_field = prompted_field or (missing_fields[0] if missing_fields else '')
+        transfer_block = ''
+        if (human_transfer or {}).get('enabled'):
+            trigger_mode = human_transfer.get('trigger_mode')
+            label = human_transfer.get('label', 'Front Desk')
+            if trigger_mode in {'explicit_only', 'explicit_or_keyword'}:
+                transfer_block = (
+                    '\n\nHuman transfer policy:\n'
+                    f'- Human transfer target label: "{label}".\n'
+                    '- Never include phone numbers, SIP URIs, or client identifiers in model output.\n'
+                    '- If the caller explicitly asks for a human, representative, operator, manager, or transfer, '
+                    'you may request transfer by returning ONLY this JSON object and nothing else:\n'
+                    f'{{"action":"transfer_call","target":"{label}","reason":"<short reason>"}}\n'
+                    '- Otherwise return normal spoken reply text.'
+                )
+
         return (
             f'{agent.persona}\n\n'
             f'Script: {agent.script}\n'
@@ -221,6 +324,7 @@ class AgentRuntime:
             'Do not invent confirmed appointments, times, transfers, or external actions that have not actually executed.\n'
             'If the caller already gave a detail, acknowledge it and move forward.\n'
             'Return only the exact spoken reply text for the next turn.'
+            f'{transfer_block}'
         )
 
     def build_retry_prompt(self, *, agent: Agent, field_name: str, retry_count: int) -> str:
@@ -290,12 +394,52 @@ class AgentRuntime:
     ) -> AgentTurn:
         lowered = user_text.lower()
         detected_intent = self.detect_intent(user_text=user_text, collected_fields=collected_fields)
+        human_transfer = self.human_transfer_config_for_agent(agent=agent)
+        if human_transfer.get('enabled'):
+            trigger_mode = human_transfer.get('trigger_mode')
+            matched_keyword = self._human_transfer_keyword_match(
+                user_text=user_text,
+                keywords=human_transfer.get('keywords', []),
+            )
+            if trigger_mode in {'keyword_only', 'explicit_or_keyword'} and matched_keyword:
+                return AgentTurn(
+                    response_text=human_transfer.get('confirmation_message')
+                    or 'Absolutely. I will transfer you to a team member now.',
+                    should_escalate=True,
+                    escalation_reason=f'keyword:{matched_keyword}',
+                    outcome='transfer_needed',
+                    tool_calls=[
+                        {
+                            'action': 'transfer_call',
+                            'target': human_transfer.get('label') or 'Front Desk',
+                            'reason': f'keyword:{matched_keyword}',
+                        }
+                    ],
+                    llm_mode='scripted',
+                    response_source='human_transfer_keyword',
+                    detected_intent=detected_intent,
+                )
         if any(keyword in lowered for keyword in ESCALATION_KEYWORDS):
             return AgentTurn(
-                response_text='I am transferring you to a human specialist now.',
+                response_text=(
+                    human_transfer.get('confirmation_message')
+                    if human_transfer.get('enabled')
+                    else 'I can connect you with a human specialist as soon as one is available.'
+                ),
                 should_escalate=True,
                 escalation_reason='sensitive_or_angry_signal',
                 outcome='transfer_needed',
+                tool_calls=(
+                    [
+                        {
+                            'action': 'transfer_call',
+                            'target': human_transfer.get('label') or 'Front Desk',
+                            'reason': 'sensitive_or_angry_signal',
+                        }
+                    ]
+                    if human_transfer.get('enabled')
+                    else None
+                ),
                 llm_mode='scripted',
                 response_source='guardrail_escalation',
                 detected_intent=detected_intent,
@@ -367,6 +511,7 @@ class AgentRuntime:
                                     missing_fields=missing_fields,
                                     prompted_field=prompted_field,
                                     detected_intent=detected_intent,
+                                    human_transfer=human_transfer,
                                 ),
                             },
                             {'role': 'user', 'content': user_text},
@@ -416,6 +561,30 @@ class AgentRuntime:
                     call_event_sink.record_event(event)
                 sanitized_text = strip_control_markup(model_text)
                 if not sanitized_text:
+                    sanitized_text = 'Let me help with that.'
+                transfer_action = self._parse_transfer_action_contract(sanitized_text)
+                if human_transfer.get('enabled') and transfer_action:
+                    trigger_mode = human_transfer.get('trigger_mode')
+                    if trigger_mode in {'explicit_only', 'explicit_or_keyword'}:
+                        expected_label = human_transfer.get('label') or 'Front Desk'
+                        target = transfer_action.get('target') or expected_label
+                        return AgentTurn(
+                            response_text=human_transfer.get('confirmation_message')
+                            or 'Absolutely. I will transfer you to a team member now.',
+                            should_escalate=True,
+                            escalation_reason=transfer_action.get('reason') or 'llm_transfer_request',
+                            outcome='transfer_needed',
+                            tool_calls=[
+                                {
+                                    'action': 'transfer_call',
+                                    'target': target,
+                                    'reason': transfer_action.get('reason') or 'llm_transfer_request',
+                                }
+                            ],
+                            llm_mode='live',
+                            response_source='llm_transfer_action',
+                            detected_intent=detected_intent,
+                        )
                     sanitized_text = 'Let me help with that.'
                 return AgentTurn(
                     response_text=sanitized_text,

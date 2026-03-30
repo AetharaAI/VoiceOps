@@ -26,7 +26,7 @@ async def test_escalates_on_sensitive_language() -> None:
     assert turn.escalation_reason is not None
 
 
-def _make_agent(required_fields: dict | None = None) -> Agent:
+def _make_agent(required_fields: dict | None = None, workflow_dsl: dict | None = None) -> Agent:
     return Agent(
         tenant_id='00000000-0000-0000-0000-000000000001',
         name='Support',
@@ -35,8 +35,131 @@ def _make_agent(required_fields: dict | None = None) -> Agent:
         required_fields=required_fields or {},
         tools_config={},
         policy_config={},
-        workflow_dsl={},
+        workflow_dsl=workflow_dsl or {},
     )
+
+
+def test_human_transfer_config_defaults_are_applied() -> None:
+    agent = _make_agent()
+
+    config = agent_runtime.human_transfer_config_for_agent(agent=agent)
+
+    assert config['enabled'] is False
+    assert config['trigger_mode'] == 'explicit_or_keyword'
+    assert config['destination_type'] == 'phone_number'
+    assert config['no_answer_fallback'] == 'return_to_ai'
+    assert config['ring_timeout_seconds'] == 20
+    assert config['keywords'] == ['human', 'representative', 'real person', 'operator', 'manager', 'sales', 'transfer me']
+
+
+@pytest.mark.asyncio
+async def test_keyword_transfer_uses_structured_action_contract() -> None:
+    agent = _make_agent(
+        workflow_dsl={
+            'workflow_type': 'inbound',
+            'inbound_builder': {
+                'human_transfer': {
+                    'enabled': True,
+                    'trigger_mode': 'keyword_only',
+                    'keywords': ['human', 'representative'],
+                    'destination_type': 'phone_number',
+                    'destination': '+18125550100',
+                    'label': 'Front Desk',
+                    'confirmation_message': 'One moment while I transfer you.',
+                    'no_answer_fallback': 'return_to_ai',
+                    'ring_timeout_seconds': 20,
+                }
+            },
+        }
+    )
+
+    turn = await agent_runtime.generate_response(
+        agent=agent,
+        user_text='Can you connect me to a human?',
+        context={},
+        collected_fields={},
+    )
+
+    assert turn.should_escalate is True
+    assert turn.response_text == 'One moment while I transfer you.'
+    assert turn.tool_calls == [
+        {
+            'action': 'transfer_call',
+            'target': 'Front Desk',
+            'reason': 'keyword:human',
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_explicit_transfer_action_contract_from_llm(monkeypatch) -> None:
+    agent = _make_agent(
+        workflow_dsl={
+            'workflow_type': 'inbound',
+            'inbound_builder': {
+                'human_transfer': {
+                    'enabled': True,
+                    'trigger_mode': 'explicit_only',
+                    'keywords': ['human'],
+                    'destination_type': 'phone_number',
+                    'destination': '+18125550100',
+                    'label': 'Front Desk',
+                    'confirmation_message': 'I will transfer you now.',
+                    'no_answer_fallback': 'return_to_ai',
+                    'ring_timeout_seconds': 20,
+                }
+            },
+        }
+    )
+    agent.policy_config = {'runtime': {'llm_provider': 'openai', 'llm_model': 'omnicoder'}}
+
+    original_endpoint = agent_runtime.settings.llm_endpoint
+    original_api_key = agent_runtime.settings.llm_api_key
+    agent_runtime.settings.llm_endpoint = 'https://api.aetherpro.tech/v1/chat/completions'
+    agent_runtime.settings.llm_api_key = 'test-key'
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                'choices': [
+                    {
+                        'message': {
+                            'content': '{"action":"transfer_call","target":"Front Desk","reason":"caller requested person"}',
+                        }
+                    }
+                ]
+            }
+
+    async def fake_post(url, json, headers):  # noqa: ANN001 - httpx-compatible test shim
+        _ = url
+        _ = json
+        _ = headers
+        return FakeResponse()
+
+    monkeypatch.setattr(agent_runtime.http, 'post', fake_post)
+    try:
+        turn = await agent_runtime.generate_response(
+            agent=agent,
+            user_text='please connect me now',
+            context={},
+            collected_fields={},
+        )
+    finally:
+        agent_runtime.settings.llm_endpoint = original_endpoint
+        agent_runtime.settings.llm_api_key = original_api_key
+
+    assert turn.should_escalate is True
+    assert turn.response_text == 'I will transfer you now.'
+    assert turn.tool_calls == [
+        {
+            'action': 'transfer_call',
+            'target': 'Front Desk',
+            'reason': 'caller requested person',
+        }
+    ]
 
 
 def test_build_opening_prompt_uses_first_required_field() -> None:

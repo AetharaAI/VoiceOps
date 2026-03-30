@@ -10,7 +10,8 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.metrics import CALLS_STARTED
 from app.db.session import get_db
-from app.models.models import Call, CallDirection, CallStatus
+from app.models.models import Agent, Call, CallDirection, CallStatus
+from app.services.agent_runtime.runtime import agent_runtime
 from app.services.realtime.session_manager import session_manager
 from app.services.realtime.stream_ingester import stream_ingester
 from app.services.telephony.event_sink import call_event_sink
@@ -278,6 +279,132 @@ async def inbound_call(
     <Stream url=\"{ws_url}\" />
   </Connect>
     </Response>"""
+    return Response(content=twiml, media_type='application/xml')
+
+
+def _transfer_target_twiml(destination_type: str, destination: str) -> str:
+    if destination_type == 'sip':
+        return f'<Sip>{destination}</Sip>'
+    if destination_type == 'twilio_client':
+        return f'<Client>{destination}</Client>'
+    return f'<Number>{destination}</Number>'
+
+
+@router.api_route('/webhooks/telephony/transfer/{call_id}', methods=['GET', 'POST'])
+async def inbound_transfer(
+    call_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    call = (await db.execute(select(Call).where(Call.id == call_id))).scalar_one_or_none()
+    if not call or not call.agent_id:
+        fallback_twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>No transfer target is configured right now. Returning you to the assistant.</Say>
+  <Hangup />
+</Response>"""
+        return Response(content=fallback_twiml, media_type='application/xml')
+
+    agent = (
+        await db.execute(
+            select(Agent).where(Agent.id == call.agent_id, Agent.tenant_id == call.tenant_id)
+        )
+    ).scalar_one_or_none()
+    if not agent:
+        fallback_twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>No transfer target is configured right now. Returning you to the assistant.</Say>
+  <Hangup />
+</Response>"""
+        return Response(content=fallback_twiml, media_type='application/xml')
+
+    transfer_cfg = agent_runtime.human_transfer_config_for_agent(agent=agent)
+    destination = transfer_cfg.get('destination') or ''
+    destination_type = transfer_cfg.get('destination_type') or 'phone_number'
+    ring_timeout = transfer_cfg.get('ring_timeout_seconds', 20)
+    if not destination:
+        fallback_twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Sorry, no one is available right now. I am sending you back to the assistant.</Say>
+  <Hangup />
+</Response>"""
+        return Response(content=fallback_twiml, media_type='application/xml')
+
+    action_url = (
+        f'{get_settings().public_base_url.rstrip("/")}/api/v1/webhooks/telephony/transfer/fallback/{call_id}'
+    )
+    dial_target = _transfer_target_twiml(destination_type, destination)
+    logger.info(
+        'telephony.transfer.twiml_issued',
+        extra={
+            'correlation_id': getattr(request.state, 'correlation_id', ''),
+            'tenant_id': str(call.tenant_id),
+            'call_id': str(call.id),
+            'call_sid': call.external_call_id or '',
+            'destination_type': destination_type,
+            'ring_timeout_seconds': ring_timeout,
+            'fallback': transfer_cfg.get('no_answer_fallback'),
+        },
+    )
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Dial timeout="{ring_timeout}" action="{action_url}" method="POST">
+    {dial_target}
+  </Dial>
+</Response>"""
+    return Response(content=twiml, media_type='application/xml')
+
+
+@router.post('/webhooks/telephony/transfer/fallback/{call_id}')
+async def inbound_transfer_fallback(
+    call_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    dial_call_status: str = Form(default=''),
+) -> Response:
+    form = await request.form()
+    status = dial_call_status or form.get('DialCallStatus', '')
+    logger.info(
+        'telephony.transfer.fallback_invoked',
+        extra={
+            'correlation_id': getattr(request.state, 'correlation_id', ''),
+            'tenant_id': '',
+            'call_id': call_id,
+            'call_sid': form.get('CallSid', ''),
+            'dial_call_status': status,
+        },
+    )
+    if status in {'completed', 'in-progress', 'answered'}:
+        twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Hangup />
+</Response>"""
+        return Response(content=twiml, media_type='application/xml')
+
+    # V1 fallback: return control to AI path by reconnecting Twilio stream to existing call ID.
+    call = (await db.execute(select(Call).where(Call.id == call_id))).scalar_one_or_none()
+    if not call:
+        twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Hangup />
+</Response>"""
+        return Response(content=twiml, media_type='application/xml')
+
+    base = get_settings().public_base_url.rstrip('/')
+    if base.startswith('https://'):
+        ws_base = 'wss://' + base.removeprefix('https://')
+    elif base.startswith('http://'):
+        ws_base = 'ws://' + base.removeprefix('http://')
+    else:
+        ws_base = 'wss://' + base
+    ws_url = f"{ws_base}/api/v1/ws/telephony/{call.id}"
+    twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>No one picked up. Returning you to the assistant.</Say>
+  <Connect>
+    <Stream url="{ws_url}" />
+  </Connect>
+</Response>"""
     return Response(content=twiml, media_type='application/xml')
 
 

@@ -24,9 +24,37 @@ function inboundConfigFromAgent(agent) {
   return agent?.workflow_dsl?.inbound_builder || {};
 }
 
+const DEFAULT_TRANSFER_KEYWORDS = ['human', 'representative', 'real person', 'operator', 'manager', 'sales', 'transfer me'];
+
+function humanTransferFromBuilder(builder) {
+  const transfer = builder?.human_transfer || {};
+  const keywords = Array.isArray(transfer.keywords)
+    ? transfer.keywords.filter((value) => typeof value === 'string' && value.trim())
+    : DEFAULT_TRANSFER_KEYWORDS;
+  return {
+    enabled: Boolean(transfer.enabled),
+    trigger_mode: transfer.trigger_mode || 'explicit_or_keyword',
+    keywords,
+    destination_type: transfer.destination_type || 'phone_number',
+    destination: transfer.destination || '',
+    label: transfer.label || 'Front Desk',
+    confirmation_message: transfer.confirmation_message || 'Absolutely. I will transfer you to a team member now.',
+    no_answer_fallback: transfer.no_answer_fallback || 'return_to_ai',
+    ring_timeout_seconds: Number.isInteger(transfer.ring_timeout_seconds) ? transfer.ring_timeout_seconds : 20
+  };
+}
+
+function parseKeywords(text) {
+  return text
+    .split(/[\n,]/)
+    .map((value) => value.trim())
+    .filter((value, index, arr) => value && arr.indexOf(value) === index);
+}
+
 function formFromAgent(agent, voices, phoneNumbers) {
   const runtime = runtimeFromAgent(agent);
   const builder = inboundConfigFromAgent(agent);
+  const transfer = humanTransferFromBuilder(builder);
   const assignedNumber = phoneNumbers.find((row) => row.agent_id === agent.id);
   const ttsModel = runtime.tts_model || 'kokoro_realtime';
   const ttsVoice = runtime.tts_voice || 'af_bella';
@@ -42,6 +70,15 @@ function formFromAgent(agent, voices, phoneNumbers) {
     required_fields: JSON.stringify(agent.required_fields || {}, null, 2),
     action_config: JSON.stringify(builder.action_config || {}, null, 2),
     crm_mapping: JSON.stringify(builder.crm_mapping || {}, null, 2),
+    human_transfer_enabled: transfer.enabled,
+    human_transfer_trigger_mode: transfer.trigger_mode,
+    human_transfer_keywords: transfer.keywords.join(', '),
+    human_transfer_destination_type: transfer.destination_type,
+    human_transfer_destination: transfer.destination,
+    human_transfer_label: transfer.label,
+    human_transfer_confirmation_message: transfer.confirmation_message,
+    human_transfer_no_answer_fallback: transfer.no_answer_fallback,
+    human_transfer_ring_timeout_seconds: transfer.ring_timeout_seconds,
     llm_model: runtime.llm_model || '',
     tts_model_select: ttsModel,
     custom_tts_model: '',
@@ -57,6 +94,11 @@ function buildAgentPayload(form) {
   const requiredFields = parseJsonObject('Required Fields JSON', form.required_fields);
   const actionConfig = parseJsonObject('Action Execution JSON', form.action_config);
   const crmMapping = parseJsonObject('CRM Mapping JSON', form.crm_mapping);
+  const ringTimeout = Number.parseInt(String(form.human_transfer_ring_timeout_seconds || '20'), 10);
+  if (!Number.isFinite(ringTimeout) || ringTimeout < 5 || ringTimeout > 120) {
+    throw new Error('Human transfer ring timeout must be an integer between 5 and 120 seconds.');
+  }
+  const transferKeywords = parseKeywords(form.human_transfer_keywords || '');
 
   return {
     name: form.name.trim(),
@@ -84,6 +126,19 @@ function buildAgentPayload(form) {
         goal: form.script.trim(),
         action_config: actionConfig,
         crm_mapping: crmMapping,
+        human_transfer: {
+          enabled: Boolean(form.human_transfer_enabled),
+          trigger_mode: form.human_transfer_trigger_mode,
+          keywords: transferKeywords.length ? transferKeywords : DEFAULT_TRANSFER_KEYWORDS,
+          destination_type: form.human_transfer_destination_type,
+          destination: form.human_transfer_destination.trim(),
+          label: form.human_transfer_label.trim() || 'Front Desk',
+          confirmation_message:
+            form.human_transfer_confirmation_message.trim() ||
+            'Absolutely. I will transfer you to a team member now.',
+          no_answer_fallback: form.human_transfer_no_answer_fallback,
+          ring_timeout_seconds: ringTimeout
+        },
         // fsm_config is persisted as-is; the State Controller reads it at call start.
         // An empty object is valid — defaults apply.
         fsm_config: parseJsonObject('FSM Config JSON', form.fsm_config)
@@ -102,6 +157,7 @@ export default function InboundPage() {
   const [form, setForm] = useState(defaultInboundForm());
   const [message, setMessage] = useState('');
   const [fsmConfigOpen, setFsmConfigOpen] = useState(false);
+  const [humanTransferOpen, setHumanTransferOpen] = useState(false);
 
   useEffect(() => {
     load();
@@ -327,6 +383,100 @@ export default function InboundPage() {
 
             <label>CRM Mapping JSON</label>
             <textarea value={form.crm_mapping} onChange={(e) => setForm({ ...form, crm_mapping: e.target.value })} />
+
+            <div style={{ marginTop: 16, borderTop: '1px solid #e0e0e0', paddingTop: 12 }}>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: '100%', textAlign: 'left', fontWeight: 500 }}
+                onClick={() => setHumanTransferOpen((open) => !open)}
+              >
+                {humanTransferOpen ? '▾' : '▸'} Human Transfer Settings
+              </button>
+              {humanTransferOpen && (
+                <div style={{ marginTop: 10 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.human_transfer_enabled)}
+                      onChange={(e) => setForm({ ...form, human_transfer_enabled: e.target.checked })}
+                    />
+                    Enable human transfer
+                  </label>
+
+                  <label>Trigger Mode</label>
+                  <select
+                    value={form.human_transfer_trigger_mode}
+                    onChange={(e) => setForm({ ...form, human_transfer_trigger_mode: e.target.value })}
+                  >
+                    <option value="explicit_only">Explicit only</option>
+                    <option value="keyword_only">Keyword only</option>
+                    <option value="explicit_or_keyword">Explicit or keyword</option>
+                  </select>
+
+                  <label>Keywords (comma or newline separated)</label>
+                  <textarea
+                    value={form.human_transfer_keywords}
+                    onChange={(e) => setForm({ ...form, human_transfer_keywords: e.target.value })}
+                  />
+
+                  <label>Target Label</label>
+                  <input
+                    value={form.human_transfer_label}
+                    onChange={(e) => setForm({ ...form, human_transfer_label: e.target.value })}
+                    placeholder="Front Desk"
+                  />
+
+                  <label>Destination Type</label>
+                  <select
+                    value={form.human_transfer_destination_type}
+                    onChange={(e) => setForm({ ...form, human_transfer_destination_type: e.target.value })}
+                  >
+                    <option value="phone_number">Phone Number</option>
+                    <option value="sip">SIP</option>
+                    <option value="twilio_client">Twilio Client</option>
+                  </select>
+
+                  <label>Destination</label>
+                  <input
+                    value={form.human_transfer_destination}
+                    onChange={(e) => setForm({ ...form, human_transfer_destination: e.target.value })}
+                    placeholder="+18129691371 or sip:agent@yourpbx.com"
+                  />
+
+                  <label>Confirmation Message</label>
+                  <textarea
+                    value={form.human_transfer_confirmation_message}
+                    onChange={(e) => setForm({ ...form, human_transfer_confirmation_message: e.target.value })}
+                  />
+
+                  <label>No Answer Fallback</label>
+                  <select
+                    value={form.human_transfer_no_answer_fallback}
+                    onChange={(e) => setForm({ ...form, human_transfer_no_answer_fallback: e.target.value })}
+                  >
+                    <option value="return_to_ai">Return to AI</option>
+                    <option value="voicemail">Voicemail</option>
+                    <option value="callback_capture">Callback capture</option>
+                    <option value="end_call">End call</option>
+                  </select>
+
+                  <label>Ring Timeout (seconds)</label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="120"
+                    value={form.human_transfer_ring_timeout_seconds}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        human_transfer_ring_timeout_seconds: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              )}
+            </div>
 
             {/* FUTURE: Visual FSM configurator — lane editor, field editor, timeout sliders,
                 greeting per-state. See FSM/voiceops_inbound_state_machine.svg for reference. */}

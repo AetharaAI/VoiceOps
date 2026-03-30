@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-03-30 — fsm-build branch (inbound human transfer settings V1)
+
+- Added minimal inbound workflow `human_transfer` config support (persisted in `workflow_dsl.inbound_builder`):
+  - `enabled`, `trigger_mode`, `keywords`, `destination_type`, `destination`, `label`,
+    `confirmation_message`, `no_answer_fallback`, `ring_timeout_seconds`
+- Updated inbound workflow editor UI:
+  - new collapsible **Human Transfer Settings** section with defaults and full save/load support
+  - frontend files:
+    - `services/frontend/lib/operator-builder.js`
+    - `services/frontend/app/inbound/page.js`
+- Updated runtime contract support:
+  - structured transfer action contract supported:
+    - `{"action":"transfer_call","target":"<label>","reason":"<string>"}`
+  - LLM system prompt now explicitly forbids outputting raw destination numbers/SIP/client identifiers
+  - transfer target is label-based only; destination resolution stays backend-only
+  - backend runtime file:
+    - `services/backend/app/services/agent_runtime/runtime.py`
+- Added Twilio transfer execution path and transfer TwiML endpoints:
+  - session manager now executes transfer by updating active Twilio call URL
+  - TwiML route resolves destination from workflow config and dials with configured timeout
+  - transfer fallback route supports V1 `return_to_ai` reconnect behavior
+  - backend files:
+    - `services/backend/app/services/realtime/session_manager.py`
+    - `services/backend/app/api/routes/webhooks.py`
+- Added tests for transfer config/action handling:
+  - `services/backend/tests/test_agent_runtime.py`
+  - `services/backend/tests/test_session_manager.py`
+
 ## 2026-03-27 — fsm-build branch (0.9 near-100% polish pass)
 
 - Investigated `logs/working-logs-0.9_1st_Near-100%.md` and fixed two remaining live-call polish issues:

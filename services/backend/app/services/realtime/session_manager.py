@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import contextlib
+import httpx
 import time
 import uuid
 from collections import deque
@@ -13,6 +14,7 @@ from fastapi import WebSocket
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.metrics import ASR_LATENCY, LLM_LATENCY, TTS_LATENCY
 from app.models.models import Agent, Call, CallStatus, TranscriptSegment
@@ -30,6 +32,7 @@ from app.services.telephony.telemetry import CallTelemetry
 from app.services.tts.client import tts_client
 
 logger = get_logger(__name__)
+settings = get_settings()
 
 TWILIO_FRAME_BYTES = 160
 TWILIO_SAMPLE_RATE = 8000
@@ -703,6 +706,131 @@ class VoiceSessionManager:
         builder = workflow.get('inbound_builder') or {}
         return builder if isinstance(builder, dict) else {}
 
+    def _resolve_transfer_action(self, turn: AgentTurn) -> dict[str, str] | None:
+        for tool_call in turn.tool_calls or []:
+            if not isinstance(tool_call, dict):
+                continue
+            if tool_call.get('action') != 'transfer_call':
+                continue
+            return {
+                'action': 'transfer_call',
+                'target': str(tool_call.get('target') or '').strip(),
+                'reason': str(tool_call.get('reason') or '').strip() or 'caller_requested_human',
+            }
+        return None
+
+    async def _trigger_twilio_transfer(
+        self,
+        *,
+        call: Call,
+    ) -> None:
+        if not settings.twilio_account_sid or not settings.twilio_auth_token:
+            raise RuntimeError('Twilio credentials are not configured.')
+        if not call.external_call_id:
+            raise RuntimeError('Cannot transfer call without Twilio call SID.')
+
+        transfer_url = (
+            f'{settings.public_base_url.rstrip("/")}/api/v1/webhooks/telephony/transfer/{call.id}'
+        )
+        twilio_url = (
+            f'https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}'
+            f'/Calls/{call.external_call_id}.json'
+        )
+        data = {
+            'Url': transfer_url,
+            'Method': 'POST',
+        }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                twilio_url,
+                data=data,
+                auth=(settings.twilio_account_sid, settings.twilio_auth_token),
+            )
+            response.raise_for_status()
+
+    async def _attempt_human_transfer(
+        self,
+        *,
+        session: VoiceSession,
+        db: AsyncSession,
+        agent: Agent,
+        call: Call,
+        turn: AgentTurn,
+    ) -> bool:
+        transfer_cfg = agent_runtime.human_transfer_config_for_agent(agent=agent)
+        if not transfer_cfg.get('enabled'):
+            return False
+
+        transfer_action = self._resolve_transfer_action(turn=turn)
+        if not transfer_action:
+            return False
+
+        configured_label = transfer_cfg.get('label') or 'Front Desk'
+        requested_label = transfer_action.get('target') or configured_label
+        if requested_label != configured_label:
+            if session.telemetry is not None:
+                session.telemetry.warning(
+                    'call.transfer.rejected',
+                    requested_target=requested_label,
+                    configured_target=configured_label,
+                    reason='unknown_transfer_target',
+                )
+            return False
+
+        destination = transfer_cfg.get('destination') or ''
+        if not destination:
+            if session.telemetry is not None:
+                session.telemetry.warning(
+                    'call.transfer.failed',
+                    requested_target=requested_label,
+                    reason='destination_not_configured',
+                )
+            return False
+
+        if session.tts_task and not session.tts_task.done():
+            with contextlib.suppress(asyncio.CancelledError):
+                await session.tts_task
+
+        if session.telemetry is not None:
+            session.telemetry.note_handoff_attempt(transfer_action.get('reason') or turn.escalation_reason)
+            session.telemetry.log(
+                'call.transfer.requested',
+                requested_target=requested_label,
+                configured_target=configured_label,
+                destination_type=transfer_cfg.get('destination_type'),
+                no_answer_fallback=transfer_cfg.get('no_answer_fallback'),
+                ring_timeout_seconds=transfer_cfg.get('ring_timeout_seconds'),
+            )
+
+        try:
+            await self._trigger_twilio_transfer(call=call)
+        except Exception as exc:
+            self._record_error(session, 'transfer_execution_failed')
+            if session.telemetry is not None:
+                session.telemetry.warning(
+                    'call.transfer.failed',
+                    requested_target=requested_label,
+                    configured_target=configured_label,
+                    reason='twilio_transfer_update_failed',
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
+            return False
+
+        call.status = CallStatus.escalated
+        call.escalation_reason = transfer_action.get('reason') or turn.escalation_reason
+        call.outcome = 'transfer_needed'
+        self._record_error(session, 'transfer_requested')
+        if session.telemetry is not None:
+            session.telemetry.log(
+                'call.transfer.started',
+                requested_target=requested_label,
+                configured_target=configured_label,
+                destination_type=transfer_cfg.get('destination_type'),
+            )
+        await db.commit()
+        return True
+
     def _build_operator_artifacts(self, *, call: Call, agent: Agent, session: VoiceSession) -> dict[str, Any]:
         builder = self._inbound_builder_config(agent=agent)
         workflow = agent.workflow_dsl or {}
@@ -955,16 +1083,11 @@ class VoiceSessionManager:
                 last_asr_final=session.last_asr_final,
             )
 
-        if turn.should_escalate:
-            call.status = CallStatus.escalated
-            call.escalation_reason = turn.escalation_reason
-            call.outcome = 'transfer_needed'
-            self._record_error(session, 'transfer_requested')
-            if session.telemetry is not None:
-                session.telemetry.note_handoff_attempt(turn.escalation_reason)
+        transfer_requested = bool(turn.should_escalate)
+        transfer_succeeded = False
 
         session.prompted_field = turn.prompted_field
-        if turn.outcome:
+        if turn.outcome and not (transfer_requested and turn.outcome == 'transfer_needed'):
             call.outcome = turn.outcome
 
         await self._persist_agent_turn(session=session, db=db, agent=agent, call=call, text=turn.response_text)
@@ -976,6 +1099,29 @@ class VoiceSessionManager:
             llm_mode=turn.llm_mode,
             response_source=turn.response_source,
         )
+        if transfer_requested:
+            transfer_succeeded = await self._attempt_human_transfer(
+                session=session,
+                db=db,
+                agent=agent,
+                call=call,
+                turn=turn,
+            )
+            if not transfer_succeeded:
+                fallback_mode = agent_runtime.human_transfer_config_for_agent(agent=agent).get('no_answer_fallback')
+                if fallback_mode != 'return_to_ai':
+                    if session.telemetry is not None:
+                        session.telemetry.warning(
+                            'call.transfer.fallback_unsupported',
+                            requested_fallback=fallback_mode,
+                            applied_fallback='return_to_ai',
+                        )
+                if session.telemetry is not None:
+                    session.telemetry.log(
+                        'call.transfer.returned_to_ai',
+                        fallback='return_to_ai',
+                        requested_fallback=fallback_mode,
+                    )
 
     async def finalize_caller_turn(
         self,

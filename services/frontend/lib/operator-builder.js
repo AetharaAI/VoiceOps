@@ -112,11 +112,21 @@ export function defaultInboundForm() {
       contact: ['name', 'callback_number'],
       note: ['intent']
     }),
+    human_transfer_enabled: false,
+    human_transfer_trigger_mode: 'explicit_or_keyword',
+    human_transfer_keywords: 'human, representative, real person, operator, manager, sales, transfer me',
+    human_transfer_destination_type: 'phone_number',
+    human_transfer_destination: '',
+    human_transfer_label: 'Front Desk',
+    human_transfer_confirmation_message: 'Absolutely. I will transfer you to a team member now.',
+    human_transfer_no_answer_fallback: 'return_to_ai',
+    human_transfer_ring_timeout_seconds: 20,
     llm_model: '',
     tts_model_select: 'kokoro_realtime',
     custom_tts_model: '',
     tts_voice_select: 'af_bella',
-    custom_tts_voice: ''
+    custom_tts_voice: '',
+    fsm_config: prettyJson({})
   };
 }
 
