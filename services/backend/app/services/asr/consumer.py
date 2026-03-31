@@ -193,6 +193,7 @@ class ASRConsumer:
         ended_ms: int | None = None
         error_msg: str | None = None
         got_speech = False
+        saw_partial_transcript = False
         last_partial_text = ''
 
         try:
@@ -205,6 +206,7 @@ class ASRConsumer:
                 if not text or text == last_partial_text:
                     return
                 last_partial_text = text
+                saw_partial_transcript = True
                 await publisher.publish(make_event(
                     ASRTranscriptEvent,
                     session_id=base.session_id,
@@ -267,9 +269,19 @@ class ASRConsumer:
                 with contextlib.suppress(Exception):
                     await asr_stream.close()
 
-        # Publish final asr.transcript whenever we heard speech or an ASR error occurred.
-        # Empty final text is meaningful and should still reach the State Controller.
-        if got_speech or error_msg is not None:
+        has_non_empty_final = bool(transcript_text.strip())
+        has_time_bounds = started_ms is not None or ended_ms is not None
+        should_publish_final = bool(
+            error_msg is not None
+            or has_non_empty_final
+            or saw_partial_transcript
+            or has_time_bounds
+        )
+
+        # Publish asr.transcript only when we have meaningful signal.
+        # Noise-only false starts commonly produce empty finals with no timings;
+        # dropping those avoids prompt-churn/step-on loops in the controller.
+        if should_publish_final:
             await publisher.publish(make_event(
                 ASRTranscriptEvent,
                 session_id=base.session_id,
@@ -287,6 +299,14 @@ class ASRConsumer:
                 'call_id': base.call_id,
                 'text_preview': transcript_text[:80],
                 'started_ms': started_ms, 'ended_ms': ended_ms,
+            })
+        elif got_speech:
+            logger.info('asr_consumer.transcript.dropped_empty_noise', extra={
+                'correlation_id': '', 'tenant_id': '',
+                'call_id': base.call_id,
+                'saw_partial_transcript': saw_partial_transcript,
+                'started_ms': started_ms,
+                'ended_ms': ended_ms,
             })
 
 
