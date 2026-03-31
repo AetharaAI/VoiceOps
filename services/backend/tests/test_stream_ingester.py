@@ -91,11 +91,12 @@ def test_speech_onset_requires_min_frames():
         # Override VAD to always return is_speech=True
         session.vad._speech = True
         # One frame below threshold — should not activate
-        await ingester._process_audio_frame(session, ws, _silence_frame())
+        for _ in range(MIN_SPEECH_FRAMES - 1):
+            await ingester._process_audio_frame(session, ws, _silence_frame())
         assert session.asr_active is False
-        assert session.consecutive_voiced_frames == 1
+        assert session.consecutive_voiced_frames == MIN_SPEECH_FRAMES - 1
 
-        # One more → hits MIN_SPEECH_FRAMES (2)
+        # One more reaches threshold.
         await ingester._process_audio_frame(session, ws, _silence_frame())
         assert session.asr_active is True
 

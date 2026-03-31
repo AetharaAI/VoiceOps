@@ -77,6 +77,7 @@ MAX_SILENCE_RETRIES = 2     # global: after this many silent turns, escalate
 STREAM_POLL_BLOCK_MS = 500  # XREADGROUP block timeout
 EARLY_EMPTY_GRACE_SECONDS = 8.0
 MAX_EARLY_EMPTY_SILENT_RETRIES = 5
+RECOVERY_PROMPT_COOLDOWN_SECONDS = 4.0
 
 TERMINAL_STATES = frozenset({'S7', 'Esc'})
 S6_CONFIRMATION_TIMEOUT_FLOOR = 14.0
@@ -162,6 +163,7 @@ class CallFSMState:
     silence_deadline: float | None = None
     silence_timeout_seconds: float = 10.0
     last_recovery_prompt: str = ''
+    last_recovery_prompt_at: float | None = None
     last_listen_started_at: float | None = None
     empty_transcript_count: int = 0
 
@@ -417,6 +419,7 @@ class StateController:
 
         state.silence_retry_count = 0
         state.last_recovery_prompt = ''
+        state.last_recovery_prompt_at = None
         state.empty_transcript_count = 0
         state.caller_turns += 1
 
@@ -603,6 +606,14 @@ class StateController:
             await self._emit_asr_start_listen(state, publisher)
             return
 
+        now = time.monotonic()
+        if (
+            state.last_recovery_prompt_at is not None
+            and now - state.last_recovery_prompt_at < RECOVERY_PROMPT_COOLDOWN_SECONDS
+        ):
+            await self._emit_asr_start_listen(state, publisher)
+            return
+
         if state.last_prompted_field:
             recovery = self._runtime.build_field_retry_prompt(
                 agent=state.agent,
@@ -620,6 +631,7 @@ class StateController:
                 previous_prompt=state.last_recovery_prompt,
             )
         state.last_recovery_prompt = recovery
+        state.last_recovery_prompt_at = now
         await self._emit_tts(state, publisher, text=recovery,
                              response_source='recovery_prompt')
 
@@ -655,7 +667,15 @@ class StateController:
                     retry_count=state.silence_retry_count,
                     previous_prompt=state.last_recovery_prompt,
                 )
+            now = time.monotonic()
+            if (
+                state.last_recovery_prompt_at is not None
+                and now - state.last_recovery_prompt_at < RECOVERY_PROMPT_COOLDOWN_SECONDS
+            ):
+                await self._emit_asr_start_listen(state, publisher)
+                return
             state.last_recovery_prompt = recovery
+            state.last_recovery_prompt_at = now
             await self._emit_tts(state, publisher, text=recovery,
                                  response_source='silence_recovery')
 
