@@ -356,6 +356,7 @@ class StateController:
         opening = self._runtime.build_opening_prompt(
             agent=state.agent, collected_fields={}
         )
+        state.last_prompted_field = opening.prompted_field
         await self._transition_to(state, 'S1', trigger=base, publisher=publisher)
         state.greeting_started_at = time.monotonic()
         logger.info('state_ctrl.greeting.start', extra={

@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-04-06 — fsm-build branch (first-turn extraction hardening pass)
+
+- Tightened first-turn FSM field alignment and noisy-name capture behavior for inbound calls.
+- Updated `services/backend/app/services/state_controller/controller.py`:
+  - seed `last_prompted_field` from `build_opening_prompt()` on `call.incoming` so first caller turn extraction stays aligned to the active prompt.
+- Updated `services/backend/app/services/agent_runtime/runtime.py`:
+  - hardened `_extract_name()` to reject noise/service-trade tokens in short phrase captures (prevents values like `"And Electrical"` from being accepted as caller names).
+- Added/updated tests:
+  - `services/backend/tests/test_state_controller.py`
+  - `services/backend/tests/test_agent_runtime.py`
+- Verification:
+  - `cd services/backend && pytest -q tests/test_state_controller.py tests/test_agent_runtime.py tests/test_fsm_consumers.py tests/test_stream_ingester.py tests/test_portal.py`
+  - Result: `88 passed`
+
 ## 2026-04-06 — fsm-build branch (portal API foundation, additive only)
 
 - Added minimal customer-portal API routes (backend only, no call-flow rewrites):

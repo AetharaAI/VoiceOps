@@ -17,6 +17,11 @@ NAME_NOISE_WORDS = {
     'my', 'name', 'is', 'this', 'i', 'am', "i'm", 'it', "it's",
     'uh', 'um', 'hmm', 'well', 'why', 'like', 'so', 'just', 'and',
 }
+NAME_SERVICE_WORDS = {
+    'electrical', 'electric', 'plumbing', 'plumber', 'hvac', 'heating',
+    'cooling', 'roofing', 'roof', 'drain', 'sewer', 'repair', 'service',
+    'dispatch', 'install', 'installation', 'emergency', 'contractor',
+}
 NAME_PREFIX_PATTERN = re.compile(r'^(my name is|name is|this is|i am|i\'m|it is|it\'s)\s+', re.IGNORECASE)
 ISSUE_PREFIX_PATTERN = re.compile(
     r'^(i need|i am calling about|i\'m calling about|calling about|it\'s about|the issue is)\s+',
@@ -729,6 +734,10 @@ class AgentRuntime:
             cleaned = ''
         parts = [part for part in re.split(r'\s+', cleaned) if part]
         if 1 <= len(parts) <= 4:
+            if any(part.lower() in NAME_NOISE_WORDS for part in parts):
+                return None
+            if any(part.lower() in NAME_SERVICE_WORDS for part in parts):
+                return None
             if any(part.lower() in {'need', 'calling', 'issue', 'problem', 'service'} for part in parts):
                 return None
             if ' '.join(parts).lower() in GENERIC_NOISE:
@@ -745,6 +754,8 @@ class AgentRuntime:
             return None
         candidate = candidates[-1]
         if len(candidate) < 2:
+            return None
+        if candidate.lower() in NAME_SERVICE_WORDS:
             return None
         return candidate.capitalize()
 

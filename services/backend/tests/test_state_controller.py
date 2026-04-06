@@ -239,6 +239,7 @@ def test_call_incoming_emits_greeting_tts():
     assert trans is not None
     assert trans.payload.to_state == 'S1'
     assert len(publisher.events_of_type('asr.start_listen')) == 0
+    assert state.last_prompted_field is not None
 
 
 def test_call_incoming_ignored_if_not_s0():

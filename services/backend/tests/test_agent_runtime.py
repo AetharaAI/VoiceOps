@@ -293,6 +293,10 @@ def test_extract_name_ignores_trailing_and_after_last_name() -> None:
     assert agent_runtime._extract_name('Gibson and 812-363-2424') == 'Gibson'
 
 
+def test_extract_name_rejects_service_word_phrase() -> None:
+    assert agent_runtime._extract_name('and electrical') is None
+
+
 def test_missing_required_fields_skips_organization_by_default() -> None:
     agent = _make_agent(
         {
