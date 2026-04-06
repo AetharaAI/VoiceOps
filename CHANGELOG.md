@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-04-06 — fsm-build branch (portal API foundation, additive only)
+
+- Added minimal customer-portal API routes (backend only, no call-flow rewrites):
+  - `GET /api/v1/portal/dashboard`
+  - `GET /api/v1/portal/business-profile`
+  - `GET /api/v1/portal/agent-mode`
+  - `PUT /api/v1/portal/agent-mode`
+  - `GET /api/v1/portal/audit-log`
+- Implementation details:
+  - new route module: `services/backend/app/api/routes/portal.py`
+  - new response/request schemas: `services/backend/app/schemas/portal.py`
+  - router registration in `services/backend/app/api/router.py`
+- Safety constraints:
+  - no DB migrations introduced
+  - no Twilio webhook or call-loop behavior changed
+  - agent-mode state is persisted via tenant-scoped audit events (`portal.agent_mode.updated`)
+  - `effective_in_live_routing` is explicitly `false` until routing path integration is implemented
+- Added tests:
+  - `services/backend/tests/test_portal.py` (mode validation unit coverage)
+- Verification:
+  - `cd services/backend && pytest -q tests/test_portal.py tests/test_state_controller.py tests/test_agent_runtime.py tests/test_fsm_consumers.py tests/test_stream_ingester.py`
+  - Result: `87 passed`
+
 ## 2026-04-06 — fsm-build branch (greeting overlap suppression pass)
 
 - Continued S1 call-open polish to reduce step-on/recovery churn before first real caller utterance.
