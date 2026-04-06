@@ -201,6 +201,20 @@ def test_emit_asr_publishes_when_no_pending_tts():
     assert state.silence_deadline is not None
 
 
+def test_emit_asr_preserves_existing_listen_window_open_at():
+    ctrl = StateController()
+    state = _make_fsm_state()
+    publisher = _FakePublisher()
+    existing = time.monotonic() - 10.0
+    state.listen_window_open_at = existing
+
+    asyncio.get_event_loop().run_until_complete(
+        ctrl._emit_asr_start_listen(state, publisher)
+    )
+
+    assert state.listen_window_open_at == existing
+
+
 # ---------------------------------------------------------------------------
 # call.incoming → S0→S1 flow
 # ---------------------------------------------------------------------------
@@ -224,6 +238,7 @@ def test_call_incoming_emits_greeting_tts():
     trans = publisher.last_of_type('state.transition')
     assert trans is not None
     assert trans.payload.to_state == 'S1'
+    assert len(publisher.events_of_type('asr.start_listen')) == 0
 
 
 def test_call_incoming_ignored_if_not_s0():
@@ -451,8 +466,8 @@ def test_asr_transcript_escalates_on_keyword():
     assert trans.payload.to_state == 'Esc'
 
 
-def test_asr_empty_transcript_emits_recovery_tts():
-    """Empty transcript triggers recovery prompt, not escalation."""
+def test_asr_empty_transcript_discards_and_reopens_listen():
+    """Empty transcript should be discarded and re-open listen without TTS."""
     ctrl = StateController()
     state = _make_fsm_state()
     state.current_state = 'S2'
@@ -467,8 +482,8 @@ def test_asr_empty_transcript_emits_recovery_tts():
     asyncio.get_event_loop().run_until_complete(run())
 
     assert state.current_state != 'Esc'
-    tts_events = publisher.events_of_type('tts.speak')
-    assert len(tts_events) >= 1
+    assert len(publisher.events_of_type('tts.speak')) == 0
+    assert len(publisher.events_of_type('asr.start_listen')) == 1
 
 
 def test_asr_empty_transcript_quick_result_restarts_listen_silently():
@@ -553,6 +568,40 @@ def test_silence_timeout_fires_recovery_on_first_miss():
     assert state.asr_listening is False
     tts_events = publisher.events_of_type('tts.speak')
     assert len(tts_events) == 1
+
+
+def test_s1_silence_timeout_reopens_listen_during_greeting_window():
+    """During the initial greeting window, silence timeout should not speak."""
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S1'
+    state.asr_listening = True
+    state.listen_window_open_at = time.monotonic() - 3.0
+    publisher = _FakePublisher()
+
+    asyncio.get_event_loop().run_until_complete(
+        ctrl._on_silence_timeout(state, publisher)
+    )
+
+    assert len(publisher.events_of_type('tts.speak')) == 0
+    assert len(publisher.events_of_type('asr.start_listen')) == 1
+
+
+def test_s1_silence_timeout_emits_recovery_after_greeting_window():
+    from app.services.state_controller.controller import GREETING_RECOVERY_DELAY_SECONDS
+
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S1'
+    state.asr_listening = True
+    state.listen_window_open_at = time.monotonic() - (GREETING_RECOVERY_DELAY_SECONDS + 1.0)
+    publisher = _FakePublisher()
+
+    asyncio.get_event_loop().run_until_complete(
+        ctrl._on_silence_timeout(state, publisher)
+    )
+
+    assert len(publisher.events_of_type('tts.speak')) == 1
 
 
 def test_silence_timeout_in_s6_uses_confirmation_retry_prompt():

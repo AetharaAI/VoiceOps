@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-04-06 — fsm-build branch (greeting overlap suppression pass)
+
+- Continued S1 call-open polish to reduce step-on/recovery churn before first real caller utterance.
+- Updated `services/backend/app/services/state_controller/controller.py`:
+  - added greeting/listen-window timing telemetry (`answer_time`, greeting start/complete, first listen, first valid transcript)
+  - empty/near-empty ASR finals are now discarded with immediate re-listen instead of speaking recovery prompts
+  - added S1 greeting recovery hold window (`GREETING_RECOVERY_DELAY_SECONDS=20.0`) so early silence timeouts re-open listening before speaking
+  - preserved listen-window anchoring across re-listens; clear anchor when emitting TTS or after first committed user input
+- Updated `services/backend/tests/test_state_controller.py`:
+  - listen-window anchor preservation test
+  - S1 empty transcript discard + reopen-listen behavior assertion
+  - S1 silence timeout behavior tests (reopen during greeting window, recover after window)
+- Verification:
+  - `cd services/backend && pytest -q tests/test_state_controller.py tests/test_agent_runtime.py tests/test_fsm_consumers.py tests/test_stream_ingester.py`
+  - Result: `85 passed`
+
 ## 2026-03-30 — fsm-build branch (inbound human transfer settings V1)
 
 - Added minimal inbound workflow `human_transfer` config support (persisted in `workflow_dsl.inbound_builder`):

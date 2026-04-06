@@ -78,6 +78,7 @@ STREAM_POLL_BLOCK_MS = 500  # XREADGROUP block timeout
 EARLY_EMPTY_GRACE_SECONDS = 8.0
 MAX_EARLY_EMPTY_SILENT_RETRIES = 5
 RECOVERY_PROMPT_COOLDOWN_SECONDS = 4.0
+GREETING_RECOVERY_DELAY_SECONDS = 20.0
 
 TERMINAL_STATES = frozenset({'S7', 'Esc'})
 S6_CONFIRMATION_TIMEOUT_FLOOR = 14.0
@@ -166,6 +167,14 @@ class CallFSMState:
     last_recovery_prompt_at: float | None = None
     last_listen_started_at: float | None = None
     empty_transcript_count: int = 0
+    listen_window_open_at: float | None = None
+    consecutive_empty_asr_count: int = 0
+    last_committed_user_input_at: float | None = None
+    answer_time: float | None = None
+    greeting_started_at: float | None = None
+    greeting_completed_at: float | None = None
+    first_listen_opened: bool = False
+    first_valid_transcript_committed: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -343,10 +352,16 @@ class StateController:
         if state.current_state != 'S0':
             return  # guard against duplicate call.incoming
 
+        state.answer_time = time.monotonic()
         opening = self._runtime.build_opening_prompt(
             agent=state.agent, collected_fields={}
         )
         await self._transition_to(state, 'S1', trigger=base, publisher=publisher)
+        state.greeting_started_at = time.monotonic()
+        logger.info('state_ctrl.greeting.start', extra={
+            'correlation_id': '', 'tenant_id': state.tenant_id,
+            'call_id': state.call_id,
+        })
         await self._emit_tts(
             state, publisher,
             text=opening.response_text,
@@ -379,8 +394,27 @@ class StateController:
             # Goodbye/transfer TTS finished — end the call cleanly
             state.terminated = True
         else:
+            if state.current_state == 'S1' and state.greeting_completed_at is None:
+                state.greeting_completed_at = time.monotonic()
+                logger.info('state_ctrl.greeting.complete', extra={
+                    'correlation_id': '', 'tenant_id': state.tenant_id,
+                    'call_id': state.call_id,
+                    'answer_to_greeting_complete_ms': (
+                        round((state.greeting_completed_at - state.answer_time) * 1000, 2)
+                        if state.answer_time is not None
+                        else None
+                    ),
+                })
             # Start listening for the next caller turn
             await self._emit_asr_start_listen(state, publisher)
+
+    def _is_valid_committed_input(self, text: str) -> bool:
+        normalized = (text or '').strip()
+        if not normalized:
+            return False
+        if len(normalized) < 2:
+            return False
+        return True
 
     async def _on_asr_transcript(
         self, state: CallFSMState, base: FSMEventBase, publisher: StreamPublisher
@@ -413,7 +447,7 @@ class StateController:
         state.asr_listening = False
         state.silence_deadline = None
 
-        if not text or not text.strip():
+        if not self._is_valid_committed_input(text):
             await self._handle_empty_transcript(state, publisher)
             return
 
@@ -421,7 +455,21 @@ class StateController:
         state.last_recovery_prompt = ''
         state.last_recovery_prompt_at = None
         state.empty_transcript_count = 0
+        state.consecutive_empty_asr_count = 0
+        state.last_committed_user_input_at = time.monotonic()
+        state.listen_window_open_at = None
         state.caller_turns += 1
+        if not state.first_valid_transcript_committed:
+            state.first_valid_transcript_committed = True
+            logger.info('state_ctrl.first_valid_transcript.commit', extra={
+                'correlation_id': '', 'tenant_id': state.tenant_id,
+                'call_id': state.call_id,
+                'answer_to_first_valid_commit_ms': (
+                    round((state.last_committed_user_input_at - state.answer_time) * 1000, 2)
+                    if state.answer_time is not None
+                    else None
+                ),
+            })
 
         # ── Greeting-state transition: first thing caller says after greeting
         # We need to move out of S1 before processing the transcript.
@@ -578,62 +626,26 @@ class StateController:
     async def _handle_empty_transcript(
         self, state: CallFSMState, publisher: StreamPublisher
     ) -> None:
-        """Empty or noise-only transcript."""
+        """Empty or noise-only transcript: discard and continue listening."""
         if state.current_state in TERMINAL_STATES:
             return
 
+        now = time.monotonic()
         state.empty_transcript_count += 1
+        state.consecutive_empty_asr_count += 1
         listen_elapsed = (
-            time.monotonic() - state.last_listen_started_at
+            now - state.last_listen_started_at
             if state.last_listen_started_at is not None
             else None
         )
-
-        # In confirmation state, avoid repeating the same yes/no prompt back-to-back.
-        if (
-            state.current_state == 'S6'
-            and state.last_recovery_prompt == self._confirmation_retry_prompt()
-        ):
-            await self._emit_asr_start_listen(state, publisher)
-            return
-
-        # Quick empty finals often come from edge VAD/noise. Keep listening for
-        # a short grace window to avoid talking over the caller.
-        if (
-            (listen_elapsed is None or listen_elapsed < EARLY_EMPTY_GRACE_SECONDS)
-            and state.empty_transcript_count <= MAX_EARLY_EMPTY_SILENT_RETRIES
-        ):
-            await self._emit_asr_start_listen(state, publisher)
-            return
-
-        now = time.monotonic()
-        if (
-            state.last_recovery_prompt_at is not None
-            and now - state.last_recovery_prompt_at < RECOVERY_PROMPT_COOLDOWN_SECONDS
-        ):
-            await self._emit_asr_start_listen(state, publisher)
-            return
-
-        if state.last_prompted_field:
-            recovery = self._runtime.build_field_retry_prompt(
-                agent=state.agent,
-                field_name=state.last_prompted_field,
-                retry_count=max(state.empty_transcript_count, state.silence_retry_count),
-                retry_reason='partial_unclear_speech',
-                previous_prompt=state.last_recovery_prompt,
-            )
-        elif state.current_state == 'S6':
-            recovery = self._confirmation_retry_prompt()
-        else:
-            recovery = self._runtime.build_general_recovery_prompt(
-                retry_reason='no_speech',
-                retry_count=max(state.empty_transcript_count, state.silence_retry_count),
-                previous_prompt=state.last_recovery_prompt,
-            )
-        state.last_recovery_prompt = recovery
-        state.last_recovery_prompt_at = now
-        await self._emit_tts(state, publisher, text=recovery,
-                             response_source='recovery_prompt')
+        logger.info('state_ctrl.asr.empty_discarded', extra={
+            'correlation_id': '', 'tenant_id': state.tenant_id,
+            'call_id': state.call_id,
+            'fsm_state': state.current_state,
+            'consecutive_empty_asr_count': state.consecutive_empty_asr_count,
+            'listen_elapsed_s': round(listen_elapsed, 3) if listen_elapsed is not None else None,
+        })
+        await self._emit_asr_start_listen(state, publisher)
 
     async def _on_silence_timeout(
         self, state: CallFSMState, publisher: StreamPublisher
@@ -644,6 +656,16 @@ class StateController:
 
         state.silence_retry_count += 1
         state.asr_listening = False
+
+        if (
+            state.current_state == 'S1'
+            and state.last_committed_user_input_at is None
+            and state.listen_window_open_at is not None
+        ):
+            elapsed = time.monotonic() - state.listen_window_open_at
+            if elapsed < GREETING_RECOVERY_DELAY_SECONDS:
+                await self._emit_asr_start_listen(state, publisher)
+                return
 
         if state.silence_retry_count >= MAX_SILENCE_RETRIES:
             await self._transition_to_escalation(
@@ -760,6 +782,7 @@ class StateController:
             fsm_state=state.current_state,
             response_source=response_source,
         )
+        state.listen_window_open_at = None
         state.pending_tts_id = tts_payload.tts_request_id
         state.agent_turns += 1
 
@@ -812,6 +835,19 @@ class StateController:
         state.asr_listening = True
         state.silence_deadline = time.monotonic() + timeout
         state.last_listen_started_at = time.monotonic()
+        if state.listen_window_open_at is None:
+            state.listen_window_open_at = state.last_listen_started_at
+        if state.current_state == 'S1' and not state.first_listen_opened:
+            state.first_listen_opened = True
+            logger.info('state_ctrl.first_listen.open', extra={
+                'correlation_id': '', 'tenant_id': state.tenant_id,
+                'call_id': state.call_id,
+                'answer_to_first_listen_ms': (
+                    round((state.listen_window_open_at - state.answer_time) * 1000, 2)
+                    if state.answer_time is not None
+                    else None
+                ),
+            })
 
         logger.info('state_ctrl.asr.start_listen', extra={
             'correlation_id': '', 'tenant_id': state.tenant_id,
