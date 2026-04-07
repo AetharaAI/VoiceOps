@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-04-07 — fsm-build branch (auth password-change endpoint, additive)
+
+- Added authenticated self-service password change endpoint:
+  - `POST /api/v1/auth/change-password`
+- Implementation details:
+  - route added in `services/backend/app/api/routes/auth.py`
+  - new request/response schemas in `services/backend/app/schemas/auth.py`
+  - validates current password before update
+  - rejects no-op password reuse (`new_password == current_password`)
+  - updates stored hash and commits transaction
+- Added auth regression tests:
+  - `services/backend/tests/test_auth_change_password.py`
+  - covers:
+    - successful password update path
+    - invalid current password rejection (`401`)
+    - same-password rejection (`400`)
+    - existing login success path still functional
+    - invalid login rejection (`401`)
+- Test bootstrap cleanup:
+  - removed temporary `email_validator` shim from `services/backend/tests/conftest.py` to avoid metadata/collection failures
+- Verification:
+  - `pytest -q services/backend/tests/test_auth_change_password.py`
+  - `pytest -q services/backend/tests/test_portal.py`
+  - `pytest -q services/backend/tests/test_stream_ingester.py`
+  - Result: `23 passed`
+
 ## 2026-04-06 — fsm-build branch (first-turn extraction hardening pass)
 
 - Tightened first-turn FSM field alignment and noisy-name capture behavior for inbound calls.

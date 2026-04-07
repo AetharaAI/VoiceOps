@@ -6,7 +6,14 @@ from app.api.deps import CurrentUser, get_current_user, require_platform_admin
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.db.session import get_db
 from app.models.models import Tenant, User, UserRole
-from app.schemas.auth import BootstrapRequest, LoginRequest, TokenResponse, UserResponse
+from app.schemas.auth import (
+    BootstrapRequest,
+    ChangePasswordRequest,
+    ChangePasswordResponse,
+    LoginRequest,
+    TokenResponse,
+    UserResponse,
+)
 
 router = APIRouter(prefix='/auth', tags=['auth'])
 
@@ -64,3 +71,24 @@ async def me(
         full_name=user.full_name,
         role=user.role,
     )
+
+
+@router.post('/change-password', response_model=ChangePasswordResponse)
+async def change_password(
+    payload: ChangePasswordRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ChangePasswordResponse:
+    user = (await db.execute(select(User).where(User.id == current_user.id))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='User not found')
+
+    if not verify_password(payload.current_password, user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Current password is incorrect')
+
+    if payload.current_password == payload.new_password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='New password must be different')
+
+    user.hashed_password = get_password_hash(payload.new_password)
+    await db.commit()
+    return ChangePasswordResponse()

@@ -23,6 +23,16 @@ class TokenResponse(BaseModel):
     token_type: str = 'bearer'
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ChangePasswordResponse(BaseModel):
+    ok: bool = True
+    message: str = 'Password updated'
+
+
 class UserResponse(BaseModel):
     id: str
     tenant_id: str
