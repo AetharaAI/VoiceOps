@@ -1,0 +1,3283 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Aether VoiceOps API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/healthz": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Healthz",
+        "operationId": "healthz_api_v1_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Healthz Api V1 Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/bootstrap": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Bootstrap",
+        "operationId": "bootstrap_api_v1_auth_bootstrap_post",
+        "parameters": [
+          {
+            "name": "x-platform-admin-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "X-Platform-Admin-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BootstrapRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Me",
+        "operationId": "me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenants": {
+      "post": {
+        "tags": [
+          "tenants"
+        ],
+        "summary": "Create Tenant",
+        "operationId": "create_tenant_api_v1_tenants_post",
+        "parameters": [
+          {
+            "name": "x-platform-admin-key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "X-Platform-Admin-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenants/me": {
+      "get": {
+        "tags": [
+          "tenants"
+        ],
+        "summary": "Tenant Me",
+        "operationId": "tenant_me_api_v1_tenants_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/phone-numbers": {
+      "get": {
+        "tags": [
+          "tenant-config"
+        ],
+        "summary": "List Phone Numbers",
+        "operationId": "list_phone_numbers_api_v1_phone_numbers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PhoneNumberResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Phone Numbers Api V1 Phone Numbers Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "tenant-config"
+        ],
+        "summary": "Create Phone Number",
+        "operationId": "create_phone_number_api_v1_phone_numbers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhoneNumberCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneNumberResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/business-hours": {
+      "get": {
+        "tags": [
+          "tenant-config"
+        ],
+        "summary": "List Business Hours",
+        "operationId": "list_business_hours_api_v1_business_hours_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BusinessHourEntry"
+                  },
+                  "type": "array",
+                  "title": "Response List Business Hours Api V1 Business Hours Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "tenant-config"
+        ],
+        "summary": "Replace Business Hours",
+        "operationId": "replace_business_hours_api_v1_business_hours_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/BusinessHourEntry"
+                },
+                "type": "array",
+                "title": "Payload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BusinessHourEntry"
+                  },
+                  "type": "array",
+                  "title": "Response Replace Business Hours Api V1 Business Hours Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/routing-rules": {
+      "get": {
+        "tags": [
+          "tenant-config"
+        ],
+        "summary": "List Routing Rules",
+        "operationId": "list_routing_rules_api_v1_routing_rules_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RoutingRuleResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Routing Rules Api V1 Routing Rules Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "tenant-config"
+        ],
+        "summary": "Create Routing Rule",
+        "operationId": "create_routing_rule_api_v1_routing_rules_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutingRuleCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutingRuleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/agents": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "List Agents",
+        "operationId": "list_agents_api_v1_agents_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Agents Api V1 Agents Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Create Agent",
+        "operationId": "create_agent_api_v1_agents_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tts/voices": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "List Supported Tts Voices",
+        "operationId": "list_supported_tts_voices_api_v1_tts_voices_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TTSVoiceOption"
+                  },
+                  "type": "array",
+                  "title": "Response List Supported Tts Voices Api V1 Tts Voices Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/llm/models": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "List Live Llm Models",
+        "operationId": "list_live_llm_models_api_v1_llm_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "title": "Response List Live Llm Models Api V1 Llm Models Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/agents/{agent_id}/config": {
+      "put": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Update Agent Config",
+        "operationId": "update_agent_config_api_v1_agents__agent_id__config_put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Agent Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentUpdateConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/calls/outbound": {
+      "post": {
+        "tags": [
+          "calls"
+        ],
+        "summary": "Create Outbound Call",
+        "operationId": "create_outbound_call_api_v1_calls_outbound_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutboundCallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/calls": {
+      "get": {
+        "tags": [
+          "calls"
+        ],
+        "summary": "List Calls",
+        "operationId": "list_calls_api_v1_calls_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CallResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Calls Api V1 Calls Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/calls/{call_id}": {
+      "get": {
+        "tags": [
+          "calls"
+        ],
+        "summary": "Call Detail",
+        "operationId": "call_detail_api_v1_calls__call_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "call_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Call Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/call-logs/latest": {
+      "get": {
+        "tags": [
+          "calls"
+        ],
+        "summary": "Latest Call Logs",
+        "operationId": "latest_call_logs_api_v1_call_logs_latest_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 1,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CallLogResponse"
+                  },
+                  "title": "Response Latest Call Logs Api V1 Call Logs Latest Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/call-logs/by-call-sid/{call_sid}": {
+      "get": {
+        "tags": [
+          "calls"
+        ],
+        "summary": "Call Log By Call Sid",
+        "operationId": "call_log_by_call_sid_api_v1_call_logs_by_call_sid__call_sid__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "call_sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Call Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallLogResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/campaigns/outbound": {
+      "get": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "List Outbound Campaigns",
+        "operationId": "list_outbound_campaigns_api_v1_campaigns_outbound_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OutboundCampaignResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Outbound Campaigns Api V1 Campaigns Outbound Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "Create Outbound Campaign",
+        "operationId": "create_outbound_campaign_api_v1_campaigns_outbound_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutboundCampaignCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutboundCampaignResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/campaigns/outbound/{campaign_id}": {
+      "put": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "Update Outbound Campaign",
+        "operationId": "update_outbound_campaign_api_v1_campaigns_outbound__campaign_id__put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "campaign_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Campaign Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutboundCampaignUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutboundCampaignResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/forms": {
+      "get": {
+        "tags": [
+          "forms"
+        ],
+        "summary": "List Forms",
+        "operationId": "list_forms_api_v1_forms_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FormResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Forms Api V1 Forms Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "forms"
+        ],
+        "summary": "Create Form",
+        "operationId": "create_form_api_v1_forms_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/forms/{form_id}/submit": {
+      "post": {
+        "tags": [
+          "forms"
+        ],
+        "summary": "Submit Form",
+        "operationId": "submit_form_api_v1_forms__form_id__submit_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Form Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormSubmitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormSubmissionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/summary": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Analytics Summary",
+        "operationId": "analytics_summary_api_v1_analytics_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsSummary"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/webhooks/telephony/inbound": {
+      "post": {
+        "tags": [
+          "telephony-webhooks"
+        ],
+        "summary": "Inbound Call",
+        "operationId": "inbound_call_api_v1_webhooks_telephony_inbound_post",
+        "parameters": [
+          {
+            "name": "call_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Call Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_inbound_call_api_v1_webhooks_telephony_inbound_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/telephony/transfer/{call_id}": {
+      "post": {
+        "tags": [
+          "telephony-webhooks"
+        ],
+        "summary": "Inbound Transfer",
+        "operationId": "inbound_transfer_api_v1_webhooks_telephony_transfer__call_id__post",
+        "parameters": [
+          {
+            "name": "call_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Call Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "telephony-webhooks"
+        ],
+        "summary": "Inbound Transfer",
+        "operationId": "inbound_transfer_api_v1_webhooks_telephony_transfer__call_id__post",
+        "parameters": [
+          {
+            "name": "call_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Call Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/telephony/transfer/fallback/{call_id}": {
+      "post": {
+        "tags": [
+          "telephony-webhooks"
+        ],
+        "summary": "Inbound Transfer Fallback",
+        "operationId": "inbound_transfer_fallback_api_v1_webhooks_telephony_transfer_fallback__call_id__post",
+        "parameters": [
+          {
+            "name": "call_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Call Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_inbound_transfer_fallback_api_v1_webhooks_telephony_transfer_fallback__call_id__post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/telephony/fallback": {
+      "post": {
+        "tags": [
+          "telephony-webhooks"
+        ],
+        "summary": "Inbound Fallback",
+        "operationId": "inbound_fallback_api_v1_webhooks_telephony_fallback_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_inbound_fallback_api_v1_webhooks_telephony_fallback_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/telephony/status": {
+      "post": {
+        "tags": [
+          "telephony-webhooks"
+        ],
+        "summary": "Call Status",
+        "operationId": "call_status_api_v1_webhooks_telephony_status_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_call_status_api_v1_webhooks_telephony_status_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Call Status Api V1 Webhooks Telephony Status Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "description": "Endpoint that serves Prometheus metrics.",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AgentCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "persona": {
+            "type": "string",
+            "title": "Persona"
+          },
+          "script": {
+            "type": "string",
+            "title": "Script"
+          },
+          "required_fields": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Required Fields"
+          },
+          "tools_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Tools Config"
+          },
+          "policy_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Policy Config"
+          },
+          "workflow_dsl": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Workflow Dsl"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "persona",
+          "script"
+        ],
+        "title": "AgentCreate"
+      },
+      "AgentResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "persona": {
+            "type": "string",
+            "title": "Persona"
+          },
+          "script": {
+            "type": "string",
+            "title": "Script"
+          },
+          "required_fields": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Required Fields"
+          },
+          "tools_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Tools Config"
+          },
+          "policy_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Policy Config"
+          },
+          "workflow_dsl": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Workflow Dsl"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "persona",
+          "script",
+          "required_fields",
+          "tools_config",
+          "policy_config",
+          "workflow_dsl"
+        ],
+        "title": "AgentResponse"
+      },
+      "AgentUpdateConfig": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "script": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Script"
+          },
+          "required_fields": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Fields"
+          },
+          "tools_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tools Config"
+          },
+          "policy_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Config"
+          },
+          "workflow_dsl": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Dsl"
+          }
+        },
+        "type": "object",
+        "title": "AgentUpdateConfig"
+      },
+      "AnalyticsSummary": {
+        "properties": {
+          "total_calls": {
+            "type": "integer",
+            "title": "Total Calls"
+          },
+          "completed_calls": {
+            "type": "integer",
+            "title": "Completed Calls"
+          },
+          "containment_rate": {
+            "type": "number",
+            "title": "Containment Rate"
+          },
+          "booking_rate": {
+            "type": "number",
+            "title": "Booking Rate"
+          },
+          "avg_handle_seconds": {
+            "type": "number",
+            "title": "Avg Handle Seconds"
+          },
+          "escalation_rate": {
+            "type": "number",
+            "title": "Escalation Rate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_calls",
+          "completed_calls",
+          "containment_rate",
+          "booking_rate",
+          "avg_handle_seconds",
+          "escalation_rate"
+        ],
+        "title": "AnalyticsSummary"
+      },
+      "Body_call_status_api_v1_webhooks_telephony_status_post": {
+        "properties": {
+          "call_sid": {
+            "type": "string",
+            "title": "Call Sid",
+            "default": ""
+          },
+          "call_status": {
+            "type": "string",
+            "title": "Call Status",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "Body_call_status_api_v1_webhooks_telephony_status_post"
+      },
+      "Body_inbound_call_api_v1_webhooks_telephony_inbound_post": {
+        "properties": {
+          "from_number": {
+            "type": "string",
+            "title": "From Number",
+            "default": ""
+          },
+          "to_number": {
+            "type": "string",
+            "title": "To Number",
+            "default": ""
+          },
+          "call_sid": {
+            "type": "string",
+            "title": "Call Sid",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "Body_inbound_call_api_v1_webhooks_telephony_inbound_post"
+      },
+      "Body_inbound_fallback_api_v1_webhooks_telephony_fallback_post": {
+        "properties": {
+          "call_sid": {
+            "type": "string",
+            "title": "Call Sid",
+            "default": ""
+          },
+          "from_number": {
+            "type": "string",
+            "title": "From Number",
+            "default": ""
+          },
+          "to_number": {
+            "type": "string",
+            "title": "To Number",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "Body_inbound_fallback_api_v1_webhooks_telephony_fallback_post"
+      },
+      "Body_inbound_transfer_fallback_api_v1_webhooks_telephony_transfer_fallback__call_id__post": {
+        "properties": {
+          "dial_call_status": {
+            "type": "string",
+            "title": "Dial Call Status",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "Body_inbound_transfer_fallback_api_v1_webhooks_telephony_transfer_fallback__call_id__post"
+      },
+      "BootstrapRequest": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password"
+          },
+          "tenant_name": {
+            "type": "string",
+            "title": "Tenant Name"
+          },
+          "tenant_slug": {
+            "type": "string",
+            "title": "Tenant Slug"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password",
+          "tenant_name",
+          "tenant_slug",
+          "email",
+          "full_name"
+        ],
+        "title": "BootstrapRequest"
+      },
+      "BusinessHourEntry": {
+        "properties": {
+          "day_of_week": {
+            "type": "integer",
+            "title": "Day Of Week"
+          },
+          "start_time": {
+            "type": "string",
+            "title": "Start Time"
+          },
+          "end_time": {
+            "type": "string",
+            "title": "End Time"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "default": "America/Indiana/Indianapolis"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day_of_week",
+          "start_time",
+          "end_time"
+        ],
+        "title": "BusinessHourEntry"
+      },
+      "CallDetailResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "external_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Call Id"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/CallDirection"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CallStatus"
+          },
+          "from_number": {
+            "type": "string",
+            "title": "From Number"
+          },
+          "to_number": {
+            "type": "string",
+            "title": "To Number"
+          },
+          "campaign_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Id"
+          },
+          "context_payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Context Payload"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "outcome_tags": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Outcome Tags"
+          },
+          "escalation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalation Reason"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "transcript": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegmentResponse"
+            },
+            "type": "array",
+            "title": "Transcript"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "agent_id",
+          "external_call_id",
+          "direction",
+          "status",
+          "from_number",
+          "to_number",
+          "campaign_id",
+          "context_payload",
+          "outcome",
+          "outcome_tags",
+          "escalation_reason",
+          "started_at",
+          "ended_at",
+          "transcript"
+        ],
+        "title": "CallDetailResponse"
+      },
+      "CallDirection": {
+        "type": "string",
+        "enum": [
+          "inbound",
+          "outbound"
+        ],
+        "title": "CallDirection"
+      },
+      "CallLogResponse": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "call_id": {
+            "type": "string",
+            "title": "Call Id"
+          },
+          "call_sid": {
+            "type": "string",
+            "title": "Call Sid"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "direction": {
+            "type": "string",
+            "title": "Direction"
+          },
+          "agent_name": {
+            "type": "string",
+            "title": "Agent Name"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          },
+          "event_count": {
+            "type": "integer",
+            "title": "Event Count"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary"
+          },
+          "events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "call_id",
+          "call_sid",
+          "tenant_id",
+          "direction",
+          "agent_name",
+          "started_at",
+          "event_count",
+          "summary",
+          "events"
+        ],
+        "title": "CallLogResponse"
+      },
+      "CallResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "external_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Call Id"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/CallDirection"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CallStatus"
+          },
+          "from_number": {
+            "type": "string",
+            "title": "From Number"
+          },
+          "to_number": {
+            "type": "string",
+            "title": "To Number"
+          },
+          "campaign_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Id"
+          },
+          "context_payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Context Payload"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "outcome_tags": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Outcome Tags"
+          },
+          "escalation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalation Reason"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "agent_id",
+          "external_call_id",
+          "direction",
+          "status",
+          "from_number",
+          "to_number",
+          "campaign_id",
+          "context_payload",
+          "outcome",
+          "outcome_tags",
+          "escalation_reason",
+          "started_at",
+          "ended_at"
+        ],
+        "title": "CallResponse"
+      },
+      "CallStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "ringing",
+          "in_progress",
+          "completed",
+          "failed",
+          "no_answer",
+          "escalated"
+        ],
+        "title": "CallStatus"
+      },
+      "FormCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Schema"
+          },
+          "workflow_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Workflow Config"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "schema"
+        ],
+        "title": "FormCreate"
+      },
+      "FormResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Schema"
+          },
+          "workflow_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Workflow Config"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "schema",
+          "workflow_config"
+        ],
+        "title": "FormResponse"
+      },
+      "FormSubmissionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "form_id": {
+            "type": "string",
+            "title": "Form Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "linked_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Call Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "form_id",
+          "tenant_id",
+          "payload",
+          "linked_call_id",
+          "created_at"
+        ],
+        "title": "FormSubmissionResponse"
+      },
+      "FormSubmitRequest": {
+        "properties": {
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "payload"
+        ],
+        "title": "FormSubmitRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LoginRequest": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password",
+          "email"
+        ],
+        "title": "LoginRequest"
+      },
+      "OutboundCallRequest": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "to_number": {
+            "type": "string",
+            "title": "To Number"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "campaign_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Id"
+          },
+          "context_payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Context Payload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "to_number"
+        ],
+        "title": "OutboundCallRequest"
+      },
+      "OutboundCampaignCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "caller_id_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caller Id Number"
+          },
+          "lead_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source"
+          },
+          "objective": {
+            "type": "string",
+            "title": "Objective"
+          },
+          "opening_line": {
+            "type": "string",
+            "title": "Opening Line"
+          },
+          "qualification_fields": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Qualification Fields"
+          },
+          "objection_guidance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objection Guidance"
+          },
+          "booking_target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Booking Target"
+          },
+          "retry_rules": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Retry Rules"
+          },
+          "voicemail_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Voicemail Config"
+          },
+          "handoff_rules": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Handoff Rules"
+          },
+          "crm_mapping": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Crm Mapping"
+          },
+          "llm_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Llm Config"
+          },
+          "tts_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Tts Config"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "objective",
+          "opening_line"
+        ],
+        "title": "OutboundCampaignCreate"
+      },
+      "OutboundCampaignResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "caller_id_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caller Id Number"
+          },
+          "lead_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source"
+          },
+          "objective": {
+            "type": "string",
+            "title": "Objective"
+          },
+          "opening_line": {
+            "type": "string",
+            "title": "Opening Line"
+          },
+          "qualification_fields": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Qualification Fields"
+          },
+          "objection_guidance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objection Guidance"
+          },
+          "booking_target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Booking Target"
+          },
+          "retry_rules": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Retry Rules"
+          },
+          "voicemail_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Voicemail Config"
+          },
+          "handoff_rules": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Handoff Rules"
+          },
+          "crm_mapping": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Crm Mapping"
+          },
+          "llm_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Llm Config"
+          },
+          "tts_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Tts Config"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "agent_id",
+          "name",
+          "caller_id_number",
+          "lead_source",
+          "objective",
+          "opening_line",
+          "qualification_fields",
+          "objection_guidance",
+          "booking_target",
+          "retry_rules",
+          "voicemail_config",
+          "handoff_rules",
+          "crm_mapping",
+          "llm_config",
+          "tts_config",
+          "is_active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "OutboundCampaignResponse"
+      },
+      "OutboundCampaignUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "caller_id_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caller Id Number"
+          },
+          "lead_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Source"
+          },
+          "objective": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective"
+          },
+          "opening_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opening Line"
+          },
+          "qualification_fields": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualification Fields"
+          },
+          "objection_guidance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objection Guidance"
+          },
+          "booking_target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Booking Target"
+          },
+          "retry_rules": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry Rules"
+          },
+          "voicemail_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voicemail Config"
+          },
+          "handoff_rules": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff Rules"
+          },
+          "crm_mapping": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Crm Mapping"
+          },
+          "llm_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Config"
+          },
+          "tts_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tts Config"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "title": "OutboundCampaignUpdate"
+      },
+      "PhoneNumberCreate": {
+        "properties": {
+          "phone_number": {
+            "type": "string",
+            "title": "Phone Number"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "default": "twilio"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "phone_number"
+        ],
+        "title": "PhoneNumberCreate"
+      },
+      "PhoneNumberResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "phone_number": {
+            "type": "string",
+            "title": "Phone Number"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "phone_number",
+          "provider",
+          "agent_id"
+        ],
+        "title": "PhoneNumberResponse"
+      },
+      "RoutingRuleCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority",
+            "default": 100
+          },
+          "rule_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Rule Config"
+          },
+          "target_agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Agent Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "rule_config"
+        ],
+        "title": "RoutingRuleCreate"
+      },
+      "RoutingRuleResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority"
+          },
+          "rule_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Rule Config"
+          },
+          "target_agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Agent Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "priority",
+          "rule_config",
+          "target_agent_id"
+        ],
+        "title": "RoutingRuleResponse"
+      },
+      "TTSVoiceOption": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "gender": {
+            "type": "string",
+            "title": "Gender"
+          },
+          "style_tag": {
+            "type": "string",
+            "title": "Style Tag"
+          },
+          "family": {
+            "type": "string",
+            "title": "Family"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Models"
+          },
+          "reference_audio_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Audio Path"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "gender",
+          "style_tag",
+          "family",
+          "provider"
+        ],
+        "title": "TTSVoiceOption"
+      },
+      "TenantCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 2,
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 2,
+            "title": "Slug"
+          },
+          "recording_enabled": {
+            "type": "boolean",
+            "title": "Recording Enabled",
+            "default": false
+          },
+          "pii_redaction_enabled": {
+            "type": "boolean",
+            "title": "Pii Redaction Enabled",
+            "default": true
+          },
+          "retention_days": {
+            "type": "integer",
+            "title": "Retention Days",
+            "default": 90
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "slug"
+        ],
+        "title": "TenantCreate"
+      },
+      "TenantResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "recording_enabled": {
+            "type": "boolean",
+            "title": "Recording Enabled"
+          },
+          "pii_redaction_enabled": {
+            "type": "boolean",
+            "title": "Pii Redaction Enabled"
+          },
+          "retention_days": {
+            "type": "integer",
+            "title": "Retention Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "recording_enabled",
+          "pii_redaction_enabled",
+          "retention_days"
+        ],
+        "title": "TenantResponse"
+      },
+      "TokenResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token"
+        ],
+        "title": "TokenResponse"
+      },
+      "TranscriptSegmentResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "speaker": {
+            "type": "string",
+            "title": "Speaker"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "is_final": {
+            "type": "boolean",
+            "title": "Is Final"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "started_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started Ms"
+          },
+          "ended_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "speaker",
+          "text",
+          "is_final",
+          "confidence",
+          "started_ms",
+          "ended_ms"
+        ],
+        "title": "TranscriptSegmentResponse"
+      },
+      "UserResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "email",
+          "full_name",
+          "role"
+        ],
+        "title": "UserResponse"
+      },
+      "UserRole": {
+        "type": "string",
+        "enum": [
+          "owner",
+          "admin",
+          "agent",
+          "analyst"
+        ],
+        "title": "UserRole"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "OAuth2PasswordBearer": {
+        "type": "oauth2",
+        "flows": {
+          "password": {
+            "scopes": {},
+            "tokenUrl": "/api/v1/auth/login"
+          }
+        }
+      }
+    }
+  }
+}
