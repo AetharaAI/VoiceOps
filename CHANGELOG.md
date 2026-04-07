@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-04-07 — fsm-build branch (platform admin tenant onboarding endpoint)
+
+- Added platform-admin onboarding endpoint for portal client creation flow:
+  - `POST /api/v1/admin/tenant-bootstrap`
+- Purpose:
+  - creates a new tenant + owner user in one request without requiring manual bootstrap payload shaping
+  - intended for internal admin onboarding from the separate portal repo
+- Implementation details:
+  - new schemas in `services/backend/app/schemas/tenant.py`:
+    - `TenantBootstrapRequest`
+    - `TenantBootstrapResponse`
+  - route in `services/backend/app/api/routes/tenants.py`
+  - automatic slug normalization + collision handling (`name`, `name-2`, `name-3`, ...)
+  - owner email normalized to lowercase
+  - temporary password created internally (not returned)
+  - returns a password reset token for first-login activation path
+- Safety:
+  - endpoint requires valid `X-Platform-Admin-Key`
+  - no database migrations added
+  - existing `/api/v1/auth/bootstrap` and login flow unchanged
+- Added tests:
+  - `services/backend/tests/test_tenant_bootstrap.py`
+- Verification:
+  - `pytest -q services/backend/tests/test_tenant_bootstrap.py`
+  - `pytest -q services/backend/tests/test_auth_change_password.py`
+  - Result: `9 passed`
+
 ## 2026-04-07 — fsm-build branch (full forgot/reset password flow, additive)
 
 - Added forgot/reset password endpoints (login flow unchanged):

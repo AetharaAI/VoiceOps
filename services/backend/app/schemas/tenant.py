@@ -1,4 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
+
+from app.models.models import UserRole
 
 
 class TenantCreate(BaseModel):
@@ -16,3 +18,21 @@ class TenantResponse(BaseModel):
     recording_enabled: bool
     pii_redaction_enabled: bool
     retention_days: int
+
+
+class TenantBootstrapRequest(BaseModel):
+    tenant_name: str = Field(min_length=2, max_length=255)
+    owner_full_name: str = Field(min_length=2, max_length=255)
+    owner_email: EmailStr
+    tenant_slug: str | None = Field(default=None, min_length=2, max_length=255)
+    owner_role: UserRole = UserRole.owner
+
+
+class TenantBootstrapResponse(BaseModel):
+    tenant_id: str
+    tenant_name: str
+    tenant_slug: str
+    owner_user_id: str
+    owner_email: EmailStr
+    password_reset_token: str
+    password_reset_expires_minutes: int
