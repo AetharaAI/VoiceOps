@@ -31,6 +31,7 @@ _REDACT_FIELDS = {
     'aether_voice_api_key',
     'aether_voice_bearer_token',
     'llm_api_key',
+    'smtp_password',
 }
 
 
@@ -241,6 +242,18 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_model: str = 'omnicoder'
     llm_timeout_seconds: int = 25
+
+    # --- Auth recovery ---
+    auth_password_reset_token_minutes: int = 30
+    auth_password_reset_url_base: str = ''
+    auth_password_reset_allow_debug_token_response: bool = False
+    smtp_host: str = ''
+    smtp_port: int = 587
+    smtp_username: str = ''
+    smtp_password: str = ''
+    smtp_from_email: str = ''
+    smtp_use_tls: bool = True
+    smtp_use_ssl: bool = False
 
     # --- Telemetry ---
     call_log_root: str = 'logs/calls'

@@ -2,10 +2,16 @@ import pytest
 from fastapi import HTTPException
 
 from app.api.deps import CurrentUser
-from app.api.routes.auth import change_password, login
+from app.api.routes.auth import change_password, forgot_password, login, reset_password
+from app.core.config import get_settings
 from app.core.security import get_password_hash, verify_password
 from app.models.models import User, UserRole
-from app.schemas.auth import ChangePasswordRequest, LoginRequest
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    LoginRequest,
+    ResetPasswordRequest,
+)
 
 
 class _FakeResult:
@@ -24,6 +30,9 @@ class _FakeDB:
     async def execute(self, stmt):  # noqa: ANN001 - AsyncSession compatibility
         _ = stmt
         return _FakeResult(self._user)
+
+    def add(self, instance):  # noqa: ANN001 - AsyncSession compatibility
+        _ = instance
 
     async def commit(self):
         self.commit_called = True
@@ -139,3 +148,55 @@ async def test_login_rejects_invalid_credentials():
         )
 
     assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_platform_admin_returns_token(monkeypatch):
+    user = _make_user()
+    db = _FakeDB(user)
+    settings = get_settings()
+    monkeypatch.setattr(settings, 'platform_admin_key', 'admin-secret')
+    monkeypatch.setattr(settings, 'auth_password_reset_allow_debug_token_response', False)
+
+    response = await forgot_password(
+        payload=ForgotPasswordRequest(email=user.email),
+        x_platform_admin_key='admin-secret',
+        db=db,
+    )
+
+    assert response.ok is True
+    assert isinstance(response.reset_token, str)
+    assert len(response.reset_token) > 20
+    assert db.commit_called is True
+
+
+@pytest.mark.asyncio
+async def test_reset_password_success_and_token_reuse_rejected(monkeypatch):
+    user = _make_user()
+    db = _FakeDB(user)
+    settings = get_settings()
+    monkeypatch.setattr(settings, 'platform_admin_key', 'admin-secret')
+    monkeypatch.setattr(settings, 'auth_password_reset_allow_debug_token_response', False)
+
+    forgot = await forgot_password(
+        payload=ForgotPasswordRequest(email=user.email),
+        x_platform_admin_key='admin-secret',
+        db=db,
+    )
+    token = forgot.reset_token
+    assert token is not None
+
+    first = await reset_password(
+        payload=ResetPasswordRequest(token=token, new_password='new-password-789'),
+        db=db,
+    )
+    assert first.ok is True
+    assert verify_password('new-password-789', user.hashed_password) is True
+    assert verify_password('old-password-123', user.hashed_password) is False
+
+    with pytest.raises(HTTPException) as exc:
+        await reset_password(
+            payload=ResetPasswordRequest(token=token, new_password='other-password-000'),
+            db=db,
+        )
+    assert exc.value.status_code == 400

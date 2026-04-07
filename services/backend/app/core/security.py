@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -29,3 +30,33 @@ def create_access_token(subject: str, tenant_id: str, role: str, expires_delta: 
         'exp': expire,
     }
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.jwt_algorithm)
+
+
+def password_fingerprint(hashed_password: str) -> str:
+    return hashlib.sha256(hashed_password.encode('utf-8')).hexdigest()
+
+
+def create_password_reset_token(
+    *,
+    subject: str,
+    tenant_id: str,
+    email: str,
+    password_fingerprint_value: str,
+    expires_minutes: int,
+) -> str:
+    settings = get_settings()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+    to_encode: dict[str, Any] = {
+        'sub': subject,
+        'tenant_id': tenant_id,
+        'email': email,
+        'scope': 'password_reset',
+        'pwdv': password_fingerprint_value,
+        'exp': expire,
+    }
+    return jwt.encode(to_encode, settings.secret_key, algorithm=settings.jwt_algorithm)
+
+
+def decode_token(token: str) -> dict[str, Any]:
+    settings = get_settings()
+    return jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])

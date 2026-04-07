@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-04-07 — fsm-build branch (full forgot/reset password flow, additive)
+
+- Added forgot/reset password endpoints (login flow unchanged):
+  - `POST /api/v1/auth/forgot-password`
+  - `POST /api/v1/auth/reset-password`
+- Implementation details:
+  - new reset token primitives in `services/backend/app/core/security.py`
+    - token scope: `password_reset`
+    - token payload binds to user id, tenant id, email, and current password fingerprint
+    - password update invalidates prior reset tokens automatically
+  - new auth schemas in `services/backend/app/schemas/auth.py`
+  - route logic + optional SMTP delivery in `services/backend/app/api/routes/auth.py`
+  - optional server-to-server token handoff:
+    - `forgot-password` returns `reset_token` when called with valid `X-Platform-Admin-Key`
+    - or when `AUTH_PASSWORD_RESET_ALLOW_DEBUG_TOKEN_RESPONSE=true`
+- Added config fields and env examples:
+  - `services/backend/app/core/config.py`
+  - `.env.example`
+- Added tests:
+  - `services/backend/tests/test_auth_change_password.py`
+  - covers:
+    - forgot-password token issuance (platform-admin path)
+    - reset-password success
+    - reset token replay rejection after password change
+    - existing login/change-password regressions still passing
+- Verification:
+  - `pytest -q services/backend/tests/test_auth_change_password.py`
+  - `pytest -q services/backend/tests/test_portal.py services/backend/tests/test_stream_ingester.py`
+  - Result: `25 passed`
+
 ## 2026-04-07 — fsm-build branch (auth password-change endpoint, additive)
 
 - Added authenticated self-service password change endpoint:

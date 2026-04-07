@@ -33,6 +33,28 @@ class ChangePasswordResponse(BaseModel):
     message: str = 'Password updated'
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordResponse(BaseModel):
+    ok: bool = True
+    message: str = (
+        'If an account exists for that email, password reset instructions have been sent.'
+    )
+    reset_token: str | None = None
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=16, max_length=4096)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ResetPasswordResponse(BaseModel):
+    ok: bool = True
+    message: str = 'Password has been reset'
+
+
 class UserResponse(BaseModel):
     id: str
     tenant_id: str
