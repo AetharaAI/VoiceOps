@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-04-09 — fsm-build branch (auth session contract: platform admin signal)
+
+- Added distinct platform-admin signal to authenticated session response:
+  - `/api/v1/auth/me` now returns `is_platform_admin: boolean`
+- Source of truth:
+  - new DB-backed user field `users.is_platform_admin` (not email-based, not env-flag-based)
+- Implementation details:
+  - model update: `services/backend/app/models/models.py` (`User.is_platform_admin`)
+  - auth dependency update: `services/backend/app/api/deps.py` (`CurrentUser.is_platform_admin`)
+  - auth schema update: `services/backend/app/schemas/auth.py` (`UserResponse.is_platform_admin`)
+  - response mapping update: `services/backend/app/api/routes/auth.py` (`/auth/me`)
+  - tenant/bootstrap owner creation explicitly sets `is_platform_admin=False`
+    in `services/backend/app/api/routes/auth.py` and `services/backend/app/api/routes/tenants.py`
+- Migration:
+  - `services/backend/alembic/versions/20260409_0003_user_platform_admin_flag.py`
+  - adds `users.is_platform_admin boolean not null default false`
+  - marks the earliest existing user as `is_platform_admin=true` during upgrade
+    (bootstrap-first internal admin path), while keeping all other users false
+- Added tests:
+  - `services/backend/tests/test_auth_me_platform_admin.py`
+  - verifies `/auth/me` includes true/false platform admin signal
+- Verification:
+  - `pytest -q services/backend/tests/test_auth_me_platform_admin.py`
+  - `pytest -q services/backend/tests/test_auth_change_password.py services/backend/tests/test_tenant_bootstrap.py`
+  - Result: `11 passed`
+
 ## 2026-04-07 — fsm-build branch (platform admin tenant onboarding endpoint)
 
 - Added platform-admin onboarding endpoint for portal client creation flow:

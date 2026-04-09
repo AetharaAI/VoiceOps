@@ -110,6 +110,7 @@ async def bootstrap(payload: BootstrapRequest, db: AsyncSession = Depends(get_db
         full_name=payload.full_name,
         role=UserRole.owner,
         hashed_password=get_password_hash(payload.password),
+        is_platform_admin=False,
     )
     db.add(user)
     await db.commit()
@@ -144,6 +145,7 @@ async def me(
         email=user.email,
         full_name=user.full_name,
         role=user.role,
+        is_platform_admin=user.is_platform_admin,
     )
 
 

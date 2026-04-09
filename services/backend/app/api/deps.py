@@ -19,6 +19,7 @@ class CurrentUser:
     tenant_id: str
     email: str
     role: UserRole
+    is_platform_admin: bool = False
 
 
 def require_platform_admin(x_platform_admin_key: str = Header(default='')) -> None:
@@ -54,6 +55,7 @@ async def get_current_user(
         tenant_id=str(user.tenant_id),
         email=user.email,
         role=user.role,
+        is_platform_admin=user.is_platform_admin,
     )
 
 

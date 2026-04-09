@@ -92,6 +92,7 @@ async def admin_tenant_bootstrap(
         role=payload.owner_role,
         hashed_password=get_password_hash(temp_password),
         is_active=True,
+        is_platform_admin=False,
     )
     db.add(owner)
     await db.flush()
