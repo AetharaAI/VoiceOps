@@ -17,6 +17,8 @@ logs/*.md
 logs/*.json
 logs/*.jsonl
 test-calls-logs/
+db-backups/
+voice-substrate-openapi.json
 
 # runtime logs
 services/backend/logs/

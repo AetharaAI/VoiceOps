@@ -10,6 +10,14 @@ These docs are meant to prevent drift between:
 
 Use this system in every serious repo.
 
+Important current pattern:
+- the active/canonical docs for an operating repo now live at the repo root:
+  - `AGENTS.md`
+  - `TRUTH.md`
+  - `PROJECT_STATE.md`
+  - `CHANGELOG.md`
+- this `TRUTH/` directory is now the template seed and reference system, not the live status location for this repo
+
 ## Canonical Files
 
 ### `AGENTS.md`
@@ -97,7 +105,7 @@ Minimum rule:
 
 ## Suggested Workflow
 1. Make or verify the change.
-2. Update `AGENTS.md`, `PROJECT_STATE.md`, `CHANGELOG.md`, and `TRUTH.md`.
+2. Update root `AGENTS.md`, `PROJECT_STATE.md`, `CHANGELOG.md`, and `TRUTH.md`.
 3. Build/restart/deploy as needed.
 4. Verify the live result.
 5. Commit and push.

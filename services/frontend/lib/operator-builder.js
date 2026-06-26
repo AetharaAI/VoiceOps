@@ -44,6 +44,67 @@ export function parseJsonObject(label, value) {
   }
 }
 
+export function tryParseJsonObject(label, value) {
+  try {
+    return {
+      value: parseJsonObject(label, value),
+      error: ''
+    };
+  } catch (err) {
+    return {
+      value: null,
+      error: err.message
+    };
+  }
+}
+
+export function validateInboundJsonFields(form) {
+  const requiredFields = tryParseJsonObject('Required Fields JSON', form.required_fields);
+  const actionConfig = tryParseJsonObject('Action Execution JSON', form.action_config);
+  const crmMapping = tryParseJsonObject('CRM Mapping JSON', form.crm_mapping);
+  const fsmConfig = tryParseJsonObject('FSM Config JSON', form.fsm_config);
+
+  const errors = {
+    required_fields: requiredFields.error,
+    action_config: actionConfig.error,
+    crm_mapping: crmMapping.error,
+    fsm_config: fsmConfig.error
+  };
+
+  if (!errors.required_fields && requiredFields.value) {
+    for (const [fieldName, config] of Object.entries(requiredFields.value)) {
+      if (!config || typeof config !== 'object' || Array.isArray(config)) {
+        errors.required_fields = `Required Fields JSON field "${fieldName}" must map to an object.`;
+        break;
+      }
+      if (typeof config.prompt !== 'string' || !config.prompt.trim()) {
+        errors.required_fields = `Required Fields JSON field "${fieldName}" must include a non-empty prompt string.`;
+        break;
+      }
+    }
+  }
+
+  if (!errors.crm_mapping && crmMapping.value) {
+    for (const [bucket, mappedFields] of Object.entries(crmMapping.value)) {
+      if (!Array.isArray(mappedFields)) {
+        errors.crm_mapping = `CRM Mapping JSON key "${bucket}" must map to an array of field names.`;
+        break;
+      }
+      if (mappedFields.some((value) => typeof value !== 'string' || !value.trim())) {
+        errors.crm_mapping = `CRM Mapping JSON key "${bucket}" must contain only non-empty string field names.`;
+        break;
+      }
+    }
+  }
+
+  const hasErrors = Object.values(errors).some(Boolean);
+
+  return {
+    errors,
+    hasErrors
+  };
+}
+
 export function buildLlmModelOptions(models, selectedModel) {
   const options = [];
   for (const model of models || []) {

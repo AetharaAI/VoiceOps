@@ -26,6 +26,34 @@ async def test_escalates_on_sensitive_language() -> None:
     assert turn.escalation_reason is not None
 
 
+@pytest.mark.asyncio
+async def test_sensitive_language_respects_fsm_escalation_toggle() -> None:
+    agent = Agent(
+        tenant_id='00000000-0000-0000-0000-000000000001',
+        name='Support',
+        persona='calm',
+        script='assist',
+        required_fields={},
+        tools_config={},
+        policy_config={},
+        workflow_dsl={
+            'workflow_type': 'inbound',
+            'inbound_builder': {
+                'fsm_config': {
+                    'frustration_escalation_enabled': False,
+                }
+            },
+        },
+    )
+    turn = await agent_runtime.generate_response(
+        agent=agent,
+        user_text='I want a manager right now',
+        context={},
+        collected_fields={},
+    )
+    assert turn.should_escalate is False
+
+
 def _make_agent(required_fields: dict | None = None, workflow_dsl: dict | None = None) -> Agent:
     return Agent(
         tenant_id='00000000-0000-0000-0000-000000000001',
@@ -50,6 +78,18 @@ def test_human_transfer_config_defaults_are_applied() -> None:
     assert config['no_answer_fallback'] == 'return_to_ai'
     assert config['ring_timeout_seconds'] == 20
     assert config['keywords'] == ['human', 'representative', 'real person', 'operator', 'manager', 'sales', 'transfer me']
+
+
+def test_fsm_config_defaults_are_applied() -> None:
+    agent = _make_agent()
+
+    config = agent_runtime.normalized_fsm_config_for_agent(agent=agent)
+
+    assert config['silence_timeout_seconds'] == 10.0
+    assert config['max_retries_per_field'] == 3
+    assert config['frustration_escalation_enabled'] is True
+    assert config['contact_capture'] == {}
+    assert config['lanes'] == {}
 
 
 @pytest.mark.asyncio

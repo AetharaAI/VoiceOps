@@ -1,5 +1,59 @@
 # Changelog
 
+## 2026-06-26 — inbound builder save-path visibility fix + recovery deployment truth refresh
+
+- Verified live recovery deployment facts from the `b3-32` VoiceOps VM without changing backend app code:
+  - deploy checkout path: `/home/ubuntu/aether-nodes/VoiceOps`
+  - local baseline branch on box: `deploy/b3-32-voiceops-baseline-2026-06-26`
+  - verified baseline commit: `d52411cb3514012b2355bddde1573065a0eb7da8`
+  - active compose: `docker-compose.recovery.yml`
+  - frontend container runs `npm run dev`
+  - backend container runs `uvicorn`
+- Verified live number-routing truth during save-bug triage:
+  - `+18127212341` was still mapped to `Carla - Skilled Trades & Services`
+  - recent calls were reaching the route, but outcomes were mostly `failed_intake`
+  - live traces reported `empty_transcript`, `silence_or_dead_air_turn`, and barge-in anomalies
+- Updated inbound builder frontend in:
+  - `services/frontend/app/inbound/page.js`
+  - `services/frontend/lib/operator-builder.js`
+- Added pre-submit JSON validation for inbound builder fields:
+  - `required_fields`
+  - `action_config`
+  - `crm_mapping`
+  - `fsm_config`
+- Added field-level JSON error messages plus one-click JSON formatting helpers for the editable JSON sections.
+- Added visible status messaging near the top of the page so operators can immediately see whether:
+  - the workflow saved
+  - the workflow saved but number mapping failed
+  - the workflow saved with no inbound number assigned
+- Clarified in code and docs that inbound workflow persistence and phone-number reassignment are separate writes.
+- Verification:
+  - `cd services/frontend && npm run build`
+  - Result: passed
+- Additional note:
+  - `cd services/frontend && npm run lint` is currently stale because `next lint` fails under the current Next.js 16 setup before linting code.
+
+## 2026-06-07 — fsm-build branch (FSM config activation + retry-skip fix)
+
+- Activated the useful live subset of persisted inbound `fsm_config` in the Phase 3 State Controller/runtime path:
+  - `silence_timeout_seconds`
+  - `max_retries_per_field`
+  - `frustration_escalation_enabled`
+- Fixed a real FSM retry bug in `services/backend/app/services/state_controller/controller.py`:
+  - exhausting per-field retries previously wrote an empty string and the field still remained "missing"
+  - result: the controller could loop the same field indefinitely instead of actually skipping ahead
+  - new behavior tracks skipped fields explicitly and emits a skip-ahead prompt to the next field
+- Updated guardrail escalation behavior:
+  - sensitive-language escalation in `services/backend/app/services/agent_runtime/runtime.py`
+  - explicit `escalate.frustration` handling in the State Controller
+  - both now respect `frustration_escalation_enabled=false`
+- Added/updated tests:
+  - `services/backend/tests/test_agent_runtime.py`
+  - `services/backend/tests/test_state_controller.py`
+- Verification:
+  - `cd services/backend && pytest -q tests/test_agent_runtime.py tests/test_state_controller.py`
+  - Result: `67 passed`
+
 ## 2026-04-09 — fsm-build branch (auth session contract: platform admin signal)
 
 - Added distinct platform-admin signal to authenticated session response:

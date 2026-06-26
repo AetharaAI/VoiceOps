@@ -10,9 +10,11 @@ import {
   compatibleVoices,
   defaultInboundForm,
   parseJsonObject,
+  prettyJson,
   resolvedTtsModel,
   resolvedVoice,
   ttsModelOptions,
+  validateInboundJsonFields,
   voiceLabel
 } from '../../lib/operator-builder';
 
@@ -156,6 +158,7 @@ export default function InboundPage() {
   const [editingAgentId, setEditingAgentId] = useState('');
   const [form, setForm] = useState(defaultInboundForm());
   const [message, setMessage] = useState('');
+  const [messageTone, setMessageTone] = useState('neutral');
   const [fsmConfigOpen, setFsmConfigOpen] = useState(false);
   const [humanTransferOpen, setHumanTransferOpen] = useState(false);
 
@@ -201,6 +204,7 @@ export default function InboundPage() {
         setVoices(DEFAULT_VOICE_OPTIONS);
       }
     } catch (err) {
+      setMessageTone('error');
       setMessage(err.message);
     }
   }
@@ -242,14 +246,30 @@ export default function InboundPage() {
         });
       }
 
+      let mappingMessage = 'Workflow saved.';
       if (form.assigned_number_id) {
-        await assignNumber(saved.id, form.assigned_number_id);
+        try {
+          await assignNumber(saved.id, form.assigned_number_id);
+          mappingMessage = 'Workflow saved and inbound number mapping updated.';
+        } catch (mappingErr) {
+          setMessageTone('warning');
+          setMessage(
+            `Workflow ${saved.name} saved, but assigning the inbound number failed: ${mappingErr.message}`
+          );
+          setEditingAgentId(saved.id);
+          await load();
+          return;
+        }
+      } else {
+        mappingMessage = 'Workflow saved, but no inbound number is assigned yet.';
       }
 
       setEditingAgentId(saved.id);
-      setMessage(`Inbound workflow ${saved.name} saved.`);
+      setMessageTone('success');
+      setMessage(`Inbound workflow ${saved.name} saved. ${mappingMessage}`);
       await load();
     } catch (err) {
+      setMessageTone('error');
       setMessage(err.message);
     }
   }
@@ -257,12 +277,27 @@ export default function InboundPage() {
   function loadWorkflow(agent) {
     setEditingAgentId(agent.id);
     setForm(formFromAgent(agent, voices, phoneNumbers));
+    setMessageTone('neutral');
     setMessage(`Loaded inbound workflow ${agent.name}.`);
+  }
+
+  function formatJsonField(fieldName, label) {
+    try {
+      const parsed = parseJsonObject(label, form[fieldName]);
+      setForm({ ...form, [fieldName]: prettyJson(parsed) });
+      setMessageTone('success');
+      setMessage(`${label} formatted.`);
+    } catch (err) {
+      setMessageTone('error');
+      setMessage(err.message);
+    }
   }
 
   const selectedModel = resolvedTtsModel(form.tts_model_select, form.custom_tts_model);
   const voiceOptions = buildVoiceOptions(compatibleVoices(voices, selectedModel));
   const modelOptions = buildLlmModelOptions(llmModels, form.llm_model);
+  const jsonValidation = validateInboundJsonFields(form);
+  const saveDisabled = jsonValidation.hasErrors || !form.name.trim();
 
   return (
     <main className="container">
@@ -279,6 +314,32 @@ export default function InboundPage() {
             Live model list unavailable: {llmModelError}
           </p>
         ) : null}
+      </section>
+
+      <section
+        className="card"
+        style={{
+          marginBottom: 16,
+          borderColor:
+            messageTone === 'error'
+              ? '#dc2626'
+              : messageTone === 'warning'
+                ? '#d97706'
+                : messageTone === 'success'
+                  ? '#059669'
+                  : undefined,
+          background:
+            messageTone === 'error'
+              ? 'rgba(254, 242, 242, 0.92)'
+              : messageTone === 'warning'
+                ? 'rgba(255, 247, 237, 0.92)'
+                : messageTone === 'success'
+                  ? 'rgba(236, 253, 245, 0.92)'
+                  : undefined,
+        }}
+      >
+        <strong>Status</strong>
+        <p style={{ marginBottom: 0 }}>{message || 'Ready.'}</p>
       </section>
 
       <div className="grid-2">
@@ -376,13 +437,52 @@ export default function InboundPage() {
             ) : null}
 
             <label>Required Fields JSON</label>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: 'auto', margin: 0 }}
+                onClick={() => formatJsonField('required_fields', 'Required Fields JSON')}
+              >
+                Format JSON
+              </button>
+            </div>
             <textarea value={form.required_fields} onChange={(e) => setForm({ ...form, required_fields: e.target.value })} />
+            {jsonValidation.errors.required_fields ? (
+              <p style={{ color: '#b42318', marginTop: -2 }}>{jsonValidation.errors.required_fields}</p>
+            ) : null}
 
             <label>Action Execution JSON</label>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: 'auto', margin: 0 }}
+                onClick={() => formatJsonField('action_config', 'Action Execution JSON')}
+              >
+                Format JSON
+              </button>
+            </div>
             <textarea value={form.action_config} onChange={(e) => setForm({ ...form, action_config: e.target.value })} />
+            {jsonValidation.errors.action_config ? (
+              <p style={{ color: '#b42318', marginTop: -2 }}>{jsonValidation.errors.action_config}</p>
+            ) : null}
 
             <label>CRM Mapping JSON</label>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: 'auto', margin: 0 }}
+                onClick={() => formatJsonField('crm_mapping', 'CRM Mapping JSON')}
+              >
+                Format JSON
+              </button>
+            </div>
             <textarea value={form.crm_mapping} onChange={(e) => setForm({ ...form, crm_mapping: e.target.value })} />
+            {jsonValidation.errors.crm_mapping ? (
+              <p style={{ color: '#b42318', marginTop: -2 }}>{jsonValidation.errors.crm_mapping}</p>
+            ) : null}
 
             <div style={{ marginTop: 16, borderTop: '1px solid #e0e0e0', paddingTop: 12 }}>
               <button
@@ -507,11 +607,20 @@ export default function InboundPage() {
                   }}>
                     {form.fsm_config || '{}'}
                   </pre>
+                  {jsonValidation.errors.fsm_config ? (
+                    <p style={{ color: '#b42318', marginTop: 8 }}>{jsonValidation.errors.fsm_config}</p>
+                  ) : null}
                 </div>
               )}
             </div>
 
-            <button type="submit" style={{ marginTop: 16 }}>{editingAgentId ? 'Save Inbound Workflow' : 'Create Inbound Workflow'}</button>
+            <button type="submit" style={{ marginTop: 16 }} disabled={saveDisabled}>
+              {jsonValidation.hasErrors
+                ? 'Fix JSON Before Saving'
+                : editingAgentId
+                  ? 'Save Inbound Workflow'
+                  : 'Create Inbound Workflow'}
+            </button>
           </form>
         </section>
 
@@ -541,9 +650,6 @@ export default function InboundPage() {
         </section>
       </div>
 
-      <section className="card" style={{ marginTop: 16 }}>
-        {message || 'Ready.'}
-      </section>
     </main>
   );
 }

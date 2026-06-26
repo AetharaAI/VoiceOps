@@ -148,8 +148,11 @@ class CallFSMState:
 
     # Retry counters (per field / per action)
     retry_counts: dict[str, int] = field(default_factory=dict)
+    skipped_fields: set[str] = field(default_factory=set)
     silence_retry_count: int = 0
     last_prompted_field: str | None = None
+    max_field_retries: int = MAX_FIELD_RETRIES
+    frustration_escalation_enabled: bool = True
 
     # Termination
     terminated: bool = False
@@ -214,6 +217,10 @@ class StateController:
             tenant_id=tenant_id,
             agent=agent,
         )
+        fsm_config = self._runtime.normalized_fsm_config_for_agent(agent=agent)
+        state.silence_timeout_seconds = fsm_config['silence_timeout_seconds']
+        state.max_field_retries = fsm_config['max_retries_per_field']
+        state.frustration_escalation_enabled = fsm_config['frustration_escalation_enabled']
 
         stream_key = self._settings.per_call_stream_key(session_id)
         group_name = self._settings.redis_cg_state_controller
@@ -494,9 +501,7 @@ class StateController:
         )
 
         # Publish llm.extract + llm.extracted to the stream for observability / audit
-        missing_before = self._runtime.missing_required_fields(
-            agent=state.agent, collected_fields=state.collected_fields
-        )
+        missing_before = self._missing_required_fields(state)
         state.collected_fields.update(agent_turn.captured_fields)
         state.detected_intent = agent_turn.detected_intent
 
@@ -515,9 +520,7 @@ class StateController:
             return
 
         # ── Decide FSM transition based on collected fields
-        missing_after = self._runtime.missing_required_fields(
-            agent=state.agent, collected_fields=state.collected_fields
-        )
+        missing_after = self._missing_required_fields(state)
 
         if not missing_after and state.current_state not in ('S6', 'S7', 'Esc'):
             # All required fields captured — move to readback
@@ -527,23 +530,43 @@ class StateController:
 
         elif state.current_state in ('S2', 'S3', 'S4a'):
             # Still collecting fields — respond naturally, keep listening
+            skip_prompt: str | None = None
             if missing_after:
                 state.last_prompted_field = missing_after[0]
                 retry_key = missing_after[0]
                 if missing_before and missing_after[0] == missing_before[0]:
                     # Same field — no progress
                     state.retry_counts[retry_key] = state.retry_counts.get(retry_key, 0) + 1
-                    if state.retry_counts[retry_key] >= MAX_FIELD_RETRIES:
-                        # Skip this field
-                        state.collected_fields[retry_key] = ''
+                    if state.retry_counts[retry_key] >= state.max_field_retries:
+                        # Skip this field for the rest of the call and move on.
+                        state.skipped_fields.add(retry_key)
                         state.retry_counts[retry_key] = 0
+                        remaining_missing = self._missing_required_fields(state)
+                        next_field = remaining_missing[0] if remaining_missing else None
+                        state.last_prompted_field = next_field
+                        if remaining_missing:
+                            skip_prompt = self._runtime.build_skip_ahead_prompt(
+                                agent=state.agent,
+                                field_name=retry_key,
+                                next_field=next_field,
+                            )
+                        else:
+                            await self._transition_to(
+                                state,
+                                'S6',
+                                trigger=base,
+                                publisher=publisher,
+                                reason='all_fields_captured_after_skip',
+                            )
+                            await self._enter_s6_tts(state, publisher)
+                            return
                 else:
                     state.retry_counts[retry_key] = 0
 
             await self._emit_tts(
                 state, publisher,
-                text=agent_turn.response_text,
-                response_source=agent_turn.response_source,
+                text=skip_prompt or agent_turn.response_text,
+                response_source='skip_ahead_prompt' if skip_prompt else agent_turn.response_source,
             )
 
         elif state.current_state == 'S6':
@@ -566,6 +589,8 @@ class StateController:
             if isinstance(payload, dict)
             else getattr(payload, 'reason', 'frustration')
         )
+        if not state.frustration_escalation_enabled:
+            return
         await self._transition_to_escalation(
             state, publisher, reason=reason, transcript=''
         )
@@ -750,6 +775,13 @@ class StateController:
         await self._emit_tts(state, publisher, text=readback,
                              response_source='readback_prompt')
 
+    def _missing_required_fields(self, state: CallFSMState) -> list[str]:
+        missing = self._runtime.missing_required_fields(
+            agent=state.agent,
+            collected_fields=state.collected_fields,
+        )
+        return [field_name for field_name in missing if field_name not in state.skipped_fields]
+
     # ------------------------------------------------------------------
     # Emitters — the only places tts.speak / asr.start_listen are built
     # ------------------------------------------------------------------
@@ -917,9 +949,7 @@ class StateController:
         for observability / audit only. The LLM Consumer (Phase 4) will handle
         llm.extract events and remove this inline path.
         """
-        missing = self._runtime.missing_required_fields(
-            agent=state.agent, collected_fields=state.collected_fields
-        )
+        missing = self._missing_required_fields(state)
         extract_payload = LLMExtractPayload(
             task='field_extract',
             transcript_text=transcript_text,

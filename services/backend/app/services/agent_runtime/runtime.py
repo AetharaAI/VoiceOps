@@ -141,6 +141,39 @@ class AgentRuntime:
         builder = workflow.get('inbound_builder') or {}
         return builder if isinstance(builder, dict) else {}
 
+    def fsm_config_for_agent(self, *, agent: Agent) -> dict:
+        fsm_config = self.inbound_builder_config(agent=agent).get('fsm_config') or {}
+        return fsm_config if isinstance(fsm_config, dict) else {}
+
+    def normalized_fsm_config_for_agent(self, *, agent: Agent) -> dict:
+        raw = self.fsm_config_for_agent(agent=agent)
+
+        silence_timeout = raw.get('silence_timeout_seconds', 10.0)
+        try:
+            silence_timeout_value = float(silence_timeout)
+        except (TypeError, ValueError):
+            silence_timeout_value = 10.0
+        silence_timeout_value = max(3.0, min(60.0, silence_timeout_value))
+
+        max_retries = raw.get('max_retries_per_field', 3)
+        try:
+            max_retries_value = int(max_retries)
+        except (TypeError, ValueError):
+            max_retries_value = 3
+        max_retries_value = max(1, min(10, max_retries_value))
+
+        return {
+            'silence_timeout_seconds': silence_timeout_value,
+            'max_retries_per_field': max_retries_value,
+            'frustration_escalation_enabled': bool(
+                raw.get('frustration_escalation_enabled', True)
+            ),
+            'contact_capture': raw.get('contact_capture')
+            if isinstance(raw.get('contact_capture'), dict)
+            else {},
+            'lanes': raw.get('lanes') if isinstance(raw.get('lanes'), dict) else {},
+        }
+
     def human_transfer_config_for_agent(self, *, agent: Agent) -> dict:
         transfer = self.inbound_builder_config(agent=agent).get('human_transfer') or {}
         if not isinstance(transfer, dict):
@@ -400,6 +433,7 @@ class AgentRuntime:
         lowered = user_text.lower()
         detected_intent = self.detect_intent(user_text=user_text, collected_fields=collected_fields)
         human_transfer = self.human_transfer_config_for_agent(agent=agent)
+        fsm_config = self.normalized_fsm_config_for_agent(agent=agent)
         if human_transfer.get('enabled'):
             trigger_mode = human_transfer.get('trigger_mode')
             matched_keyword = self._human_transfer_keyword_match(
@@ -424,7 +458,10 @@ class AgentRuntime:
                     response_source='human_transfer_keyword',
                     detected_intent=detected_intent,
                 )
-        if any(keyword in lowered for keyword in ESCALATION_KEYWORDS):
+        if (
+            fsm_config.get('frustration_escalation_enabled', True)
+            and any(keyword in lowered for keyword in ESCALATION_KEYWORDS)
+        ):
             return AgentTurn(
                 response_text=(
                     human_transfer.get('confirmation_message')

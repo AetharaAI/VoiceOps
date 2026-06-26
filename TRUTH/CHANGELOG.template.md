@@ -5,6 +5,7 @@
 ### Category
 - Material change
 - Material change
+- Runtime truth re-verified against deployment, if applicable
 
 ### Deployment
 - Build/publish/restart notes

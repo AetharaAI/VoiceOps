@@ -724,6 +724,32 @@ def test_resolve_listen_timeout_in_s6_has_confirmation_floor():
     assert timeout >= 14.0
 
 
+def test_resolve_listen_timeout_uses_fsm_configured_base_timeout():
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.silence_timeout_seconds = 18.0
+    state.current_state = 'S2'
+    state.last_prompted_field = 'issue'
+
+    timeout = ctrl._resolve_listen_timeout(state)
+
+    assert timeout == 18.0
+
+
+def test_missing_required_fields_excludes_skipped_fields():
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.agent.required_fields = {
+        'name': {'prompt': 'Name?'},
+        'organization': {'prompt': 'Organization?'},
+    }
+    state.skipped_fields.add('name')
+
+    missing = ctrl._missing_required_fields(state)
+
+    assert missing == []
+
+
 # ---------------------------------------------------------------------------
 # State transition helper
 # ---------------------------------------------------------------------------
@@ -887,6 +913,63 @@ def test_escalation_emits_transfer_tts():
     tts = publisher.last_of_type('tts.speak')
     assert tts is not None
     assert tts.payload.response_source == 'escalation_transfer'
+
+
+def test_escalation_event_ignored_when_disabled():
+    from app.services.streams.event_schemas import (
+        EscalateFrustrationEvent,
+        EscalateFrustrationPayload,
+    )
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S3'
+    state.frustration_escalation_enabled = False
+    publisher = _FakePublisher()
+
+    esc_event = make_event(
+        EscalateFrustrationEvent,
+        session_id=state.session_id,
+        call_id=state.call_id,
+        payload=EscalateFrustrationPayload(
+            fsm_state='S3',
+            trigger_transcript='I want to speak to a manager',
+            reason='explicit_request',
+        ),
+    )
+
+    asyncio.get_event_loop().run_until_complete(
+        ctrl._on_escalate(state, esc_event, publisher)
+    )
+
+    assert state.current_state == 'S3'
+    assert publisher.last_of_type('tts.speak') is None
+
+
+def test_retry_limit_skip_moves_to_next_field():
+    ctrl = StateController()
+    state = _make_fsm_state()
+    state.current_state = 'S2'
+    state.asr_listening = True
+    state.max_field_retries = 1
+    state.last_prompted_field = 'name'
+    state.agent.required_fields = {
+        'name': {'prompt': 'Could I have your name?'},
+        'issue': {'prompt': 'What can I help you with today?'},
+    }
+    publisher = _FakePublisher()
+
+    async def run():
+        event = _make_transcript_event(state, text='yes')
+        await ctrl._on_asr_transcript(state, event, publisher)
+
+    asyncio.get_event_loop().run_until_complete(run())
+
+    assert 'name' in state.skipped_fields
+    assert state.last_prompted_field == 'issue'
+    tts = publisher.last_of_type('tts.speak')
+    assert tts is not None
+    assert tts.payload.response_source == 'skip_ahead_prompt'
+    assert 'What can I help you with today?' in tts.payload.text
 
 
 # ---------------------------------------------------------------------------
