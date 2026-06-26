@@ -29,7 +29,12 @@
   - `/api/v1/ws/telephony/`
 - Public app/admin/API exposure was hardened on the deploy VM on `2026-06-26`
 - Verified live mapped demo/business number: `+18127212341`
-- Verified mapped live agent on deploy VM at inspection time: `Carla - Skilled Trades & Services`
+- Verified mapped live agent on deploy VM before demo rewrite: `Carla - Skilled Trades & Services`
+- Verified live mapped agent after direct recovery-DB update on `2026-06-26`: `Mary's Beauty Spa - Medspa Demo`
+- Verified live runtime on `+18127212341` now points to:
+  - model: `grm2.6-plus`
+  - TTS lane: `voxtream2_realtime`
+  - voice: `cj_clone_male`
 
 ## Save-Path Truth
 - Inbound workflow save is not a single operation.
@@ -38,7 +43,8 @@
   2. phone-number reassignment
 - A workflow can save while number remapping fails.
 - Before the `2026-06-26` local frontend fix, malformed JSON in the inbound builder could feel like a dead save because the page surfaced failure poorly.
-- Deployment inspection on `2026-06-26` showed the live mapped agent for `+18127212341` did not reflect the newly attempted demo workflow save.
+- Deployment inspection on `2026-06-26` initially showed the live mapped agent for `+18127212341` did not reflect the newly attempted demo workflow save.
+- Direct recovery-DB remediation was then applied to the already-mapped agent row so the live `721` line now carries the Mary's Beauty Spa demo workflow without requiring manual UI re-entry.
 
 ## Known Live Demo Gaps
 - Recent real calls to `+18127212341` were reaching the correct route but outcomes were mostly `failed_intake`, with one `partial_intake`.

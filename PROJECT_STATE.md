@@ -12,7 +12,8 @@
   - active compose: `docker-compose.recovery.yml`
   - frontend container still runs `npm run dev` behind nginx
   - backend container runs `uvicorn` on loopback-exposed port `8102`
-- Live routing inspection on `2026-06-26` confirmed `+18127212341` was still mapped to agent `Carla - Skilled Trades & Services`, not to the newly attempted Promise/demo workflow save.
+- Live routing inspection on `2026-06-26` confirmed `+18127212341` was initially still mapped to agent `Carla - Skilled Trades & Services`, not to the newly attempted Promise/demo workflow save.
+- That mismatch was corrected the same day by directly updating the mapped recovery-DB agent row, which is now verified as `Mary's Beauty Spa - Medspa Demo` with `grm2.6-plus` + `voxtream2_realtime` + `cj_clone_male`.
 - Realtime voice loop is now connected to the external Aether Voice gateway contract.
 - Live call pipeline is functional end-to-end as of `2026-03-17`.
 - First successful polished live E2E call completed on `2026-03-17`:
@@ -138,10 +139,10 @@ Phase 3 (FSM Pipeline) is **COMPLETE** on the `fsm-build` branch. All 84 tests p
    - malformed JSON must block submit locally with clear field-level errors
    - successful agent save must report whether number reassignment also succeeded
    - edited demo workflow must be verified against the actual mapped number in the active recovery database
-2. Resolve the live number-routing/content mismatch for `+18127212341`:
-   - confirm which agent should own the number
-   - confirm the saved workflow lands on that exact mapped agent record
-   - retest save → refresh → live call behavior end-to-end
+2. Retest the live `+18127212341` Mary's Beauty Spa demo end-to-end now that the mapped agent row has been corrected:
+   - verify greeting, field capture, and readback behavior on a real call
+   - observe whether `send_email/create_note/mark_outcome` produce the intended artifacts
+   - confirm whether `phone_number` field naming behaves better or worse than `callback_number` under PSTN extraction
 3. Validate `2026-03-26` timing tune in live calls:
    - `silence_timeout_seconds` increased `8.0 -> 10.0`
    - end-of-turn silence threshold increased `30 -> 40` frames in both FSM + legacy paths

@@ -10,9 +10,13 @@
   - frontend container runs `npm run dev`
   - backend container runs `uvicorn`
 - Verified live number-routing truth during save-bug triage:
-  - `+18127212341` was still mapped to `Carla - Skilled Trades & Services`
+  - `+18127212341` was initially still mapped to `Carla - Skilled Trades & Services`
   - recent calls were reaching the route, but outcomes were mostly `failed_intake`
   - live traces reported `empty_transcript`, `silence_or_dead_air_turn`, and barge-in anomalies
+- Applied direct recovery-DB configuration update to the already-mapped `+18127212341` agent row:
+  - live agent now verified as `Mary's Beauty Spa - Medspa Demo`
+  - runtime now verified as `grm2.6-plus` + `voxtream2_realtime` + `cj_clone_male`
+  - updated agent id remains `de9c2ae7-fe68-4936-aea6-aa4ff4d84bdf`, so phone-number mapping did not need to change
 - Updated inbound builder frontend in:
   - `services/frontend/app/inbound/page.js`
   - `services/frontend/lib/operator-builder.js`
