@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-06-29 — nginx allowlist refresh + recovery stack restart (deploy VM)
+
+- `voice.aetherpro.us` was returning nginx `403 Forbidden` for the operator browser: Xfinity rotated the operator public IP to `73.145.241.211`, which was not in the `voiceops-recovery.conf` allowlist (rolling-IP problem).
+- Confirmed the gate is the intentional `allow`/`deny` block in `/etc/nginx/sites-enabled/voiceops-recovery.conf`; Tailnet `100.64.0.0/10` and prior operator IPs `73.145.240.8`/`73.145.242.40` were already allowed.
+- Added `73.145.241.211` to all four restricted blocks (aetherpro `/api/v1/`, `= /api/v1`, `/`, and syndicateai `/`); `sudo nginx -t` clean, `sudo systemctl reload nginx` OK.
+- Moved the config backup out of `sites-enabled/` to `/etc/nginx/backups/` (a `.bak` left in `sites-enabled/` was being parsed by nginx and produced `conflicting server name` warnings).
+- Recovery stack had been taken down by a `docker compose` run against the default `docker-compose.yml` (external network `aether_net` missing) instead of `docker-compose.recovery.yml` (network `acer_infra`). Restored with `docker compose -f docker-compose.recovery.yml up -d --build`; this also deployed the Voxtral TTS lane (FF of the deploy branch to `b7937c2`).
+- Verified post-restart: FE `127.0.0.1:3102` → 200, BE `127.0.0.1:8102` healthy (401 auth-gated), backend registry exposes `voxtral_casual_female`, frontend image carries the `voxtral_tts` dropdown entry.
+- Rotation-proof follow-up: reach the UI over Tailnet (node `100.92.18.20`) via a laptop `/etc/hosts` override so future Xfinity rotations stop mattering.
+
+## 2026-06-27 — VoiceOps nginx allowlist refresh
+
+- Investigated `https://voice.aetherpro.us` returning nginx `403 Forbidden` for the operator browser.
+- Verified the request matched `/etc/nginx/sites-enabled/voiceops-recovery.conf` and was blocked by the intentional app/admin `allow`/`deny` gate, not by an upstream failure.
+- Verified `voiceops-frontend-recovery` and `voiceops-backend-recovery` were healthy on `127.0.0.1:3102` and `127.0.0.1:8102`.
+- Added operator public IP `73.145.242.40` to the restricted nginx allowlist while keeping Tailnet access and the previous operator IP.
+- Validation: `sudo nginx -t` passed, then `sudo systemctl reload nginx` completed.
+
 ## 2026-06-29 — Voxtral TTS demo lane added to operator builders
 
 - Added the `voxtral_tts` lane to the VoiceOps TTS model dropdown (inbound, outbound, and agents builders share `services/frontend/lib/operator-builder.js`).

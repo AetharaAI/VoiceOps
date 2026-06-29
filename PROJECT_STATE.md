@@ -2,6 +2,7 @@
 
 ## Current Status
 - VoiceOps is live behind NGINX at `voice.aetherpro.us`.
+- Restricted nginx app/admin/API ingress (`voiceops-recovery.conf`) was refreshed on `2026-06-29` to add rotating operator public IP `73.145.241.211` alongside Tailnet `100.64.0.0/10` and prior operator IPs `73.145.240.8`/`73.145.242.40`; rotation-proof access is via the node Tailnet IP `100.92.18.20` (laptop `/etc/hosts` override of `voice.aetherpro.us`).
 - Backend and frontend are healthy.
 - API docs reachable at `/docs`.
 - Manual DB provisioning is in place and considered canonical for current deployment.

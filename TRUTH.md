@@ -28,6 +28,7 @@
   - `/api/v1/webhooks/telephony/`
   - `/api/v1/ws/telephony/`
 - Public app/admin/API exposure was hardened on the deploy VM on `2026-06-26`
+- Restricted app/admin/API ingress in `voiceops-recovery.conf` allows Tailnet `100.64.0.0/10` plus rotating operator public IPs; as of `2026-06-29` the allowlist holds `73.145.240.8`, `73.145.242.40`, `73.145.241.211` (Xfinity rotates these — Tailnet access via the node tailnet IP `100.92.18.20` is the rotation-proof path)
 - Verified live mapped demo/business number: `+18127212341`
 - Verified mapped live agent on deploy VM before demo rewrite: `Carla - Skilled Trades & Services`
 - Verified live mapped agent after direct recovery-DB update on `2026-06-26`: `Mary's Beauty Spa - Medspa Demo`
