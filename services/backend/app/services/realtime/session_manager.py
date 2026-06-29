@@ -41,6 +41,9 @@ MIN_SPEECH_FRAMES = 5
 END_OF_TURN_SILENCE_FRAMES = 40
 TTS_MEDIA_CHUNK_BYTES = 640
 RECENT_FRAME_BUFFER = 10
+# Safety valve: if Twilio never echoes the tts_done mark, stop treating the agent
+# as "speaking" after this long so the listen loop can never deadlock.
+TTS_PLAYBACK_MAX_SECONDS = 30.0
 RECOVERY_PROMPT = 'Sorry, I missed that. Could you repeat that?'
 MAX_FIELD_RETRIES = 2
 MAX_CONSECUTIVE_RECOVERY_TURNS = 4
@@ -75,6 +78,7 @@ class VoiceSession:
     stream_sid: str | None = None
     tts_task: asyncio.Task | None = None
     speaking: bool = False
+    speaking_started_at: float = 0.0
     collected_fields: dict[str, str] = field(default_factory=dict)
     prompted_field: str | None = None
     conversation_history: list[dict[str, str]] = field(default_factory=list)
@@ -183,11 +187,20 @@ class VoiceSessionManager:
 
         if event_type == 'mark':
             mark_payload = event.get('mark') or {}
+            mark_name = mark_payload.get('name', '')
+            if mark_name == 'tts_done':
+                # Twilio confirms the agent's prompt has finished playing. Only now is
+                # it safe to listen, and we reset VAD counters so the agent's own audio
+                # tail does not bleed into the caller's turn.
+                session.speaking = False
+                session.consecutive_voiced_frames = 0
+                session.consecutive_silence_frames = 0
+                session.pre_speech_frames.clear()
             if session.telemetry is not None:
                 session.telemetry.log(
                     'call.telephony.stream.mark',
                     media_stream_event='mark',
-                    mark_name=mark_payload.get('name', ''),
+                    mark_name=mark_name,
                 )
             return True
 
@@ -294,6 +307,7 @@ class VoiceSessionManager:
 
         async def _stream() -> None:
             session.speaking = True
+            session.speaking_started_at = time.monotonic()
             t0 = time.perf_counter()
             session.tts_requests += 1
             tts_request_index = session.tts_requests
@@ -369,6 +383,9 @@ class VoiceSessionManager:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                # No playback will reach the caller, so stop "speaking" immediately
+                # (no tts_done mark is sent on the error path).
+                session.speaking = False
                 self._record_error(session, 'tts_stream_error')
                 if session.telemetry is not None:
                     session.telemetry.warning(
@@ -407,7 +424,11 @@ class VoiceSessionManager:
                         latency_ms=round(max(0.0, (time.perf_counter() - t0) * 1000), 2),
                     )
                 TTS_LATENCY.observe(time.perf_counter() - t0)
-                session.speaking = False
+                # NOTE: do NOT clear session.speaking here. Audio has only been *sent*
+                # to Twilio; it keeps *playing* for several seconds. Clearing now lets
+                # the agent's own prompt audio (line echo) trip VAD and fire a false
+                # no-speech recovery. speaking is cleared when Twilio echoes the
+                # tts_done mark (playback complete) or by the safety valve.
 
         session.tts_task = asyncio.create_task(_stream())
 
@@ -1276,6 +1297,18 @@ class VoiceSessionManager:
 
             pcm_frame_8k = mulaw_to_pcm16(frame_mulaw)
             is_speech = session.vad.is_speech(pcm_frame_8k, TWILIO_SAMPLE_RATE)
+
+            if session.speaking and not session.caller_turn_active:
+                # The agent's prompt is still playing (cleared by the inbound tts_done
+                # mark). Do not let the agent's own audio echoing on the line start a
+                # caller turn and fire a false no-speech recovery. Safety valve: if the
+                # mark is somehow never received, stop waiting after a hard cap.
+                if time.monotonic() - session.speaking_started_at > TTS_PLAYBACK_MAX_SECONDS:
+                    session.speaking = False
+                else:
+                    session.consecutive_voiced_frames = 0
+                    session.pre_speech_frames.append(frame_mulaw)
+                    continue
 
             if not session.caller_turn_active:
                 session.pre_speech_frames.append(frame_mulaw)

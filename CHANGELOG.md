@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-06-29 — stop false "I didn't hear anything" before the caller can answer
+
+- Symptom (late-call, date/follow-up questions): the agent asked, then immediately fired a `no_speech` recovery ("I didn't hear anything there" / "the line was quiet") before the caller could answer. Log proof: ASR listen turn started `15:03:32.272` and finalized empty `15:03:33.761`, but the question's audio did not finish playing until the inbound `tts_done` mark at `15:03:35.835`.
+- Root cause: `session.speaking` was cleared as soon as TTS audio was **sent** to Twilio, not when it finished **playing**. During the multi-second playback the agent's own prompt audio (line echo, e.g. caller on speakerphone) tripped VAD, started an ASR turn, found nothing, and fired a false no-speech recovery.
+- Fix (`session_manager`): `speaking` now stays true until Twilio echoes the `tts_done` mark (playback complete); while speaking, inbound audio cannot start a caller turn (clean half-duplex), and VAD counters reset at `tts_done`. Added `TTS_PLAYBACK_MAX_SECONDS` safety valve so a lost mark can never deadlock the listen loop; the TTS error path clears `speaking` immediately.
+- Trade-off: the caller can no longer barge-in over the agent mid-prompt (acceptable for short prompts; kills the self-echo false trigger). A sustained-speech barge-in threshold can restore interruptions later.
+- Tests: added `tts_done` mark clears-speaking / resets-counters cases (81 passed).
+
 ## 2026-06-29 — fix field desync that caused reworded re-asks
 
 - Follow-up to the history change: live call still re-asked the same field (e.g. "what service") in different words. Log trace showed the LLM asked fields in the persona/script order (name -> service -> phone) while the backend set `prompted_field = missing_fields[0]` (the `required_fields` dict order: name -> phone -> follow_up -> service). So a service answer was extracted against the wrong field and dropped; service stayed "missing" and got asked again, and a service answer once landed in `follow_up_method`.

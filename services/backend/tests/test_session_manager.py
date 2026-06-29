@@ -115,6 +115,40 @@ def test_mark_event_is_passthrough(monkeypatch) -> None:
     }
 
 
+def test_tts_done_mark_clears_speaking_and_resets_counters() -> None:
+    manager = VoiceSessionManager()
+    session = VoiceSession(call_id='call-123', tenant_id='tenant-123')
+    session.speaking = True
+    session.consecutive_voiced_frames = 4
+    session.consecutive_silence_frames = 7
+    session.pre_speech_frames.append(b'\x00')
+
+    handled = manager._handle_passthrough_telephony_event(
+        session=session,
+        event={'event': 'mark', 'mark': {'name': 'tts_done'}},
+    )
+
+    assert handled is True
+    # Playback finished -> safe to listen, with a clean VAD slate.
+    assert session.speaking is False
+    assert session.consecutive_voiced_frames == 0
+    assert session.consecutive_silence_frames == 0
+    assert len(session.pre_speech_frames) == 0
+
+
+def test_non_tts_done_mark_keeps_speaking() -> None:
+    manager = VoiceSessionManager()
+    session = VoiceSession(call_id='call-123', tenant_id='tenant-123')
+    session.speaking = True
+
+    manager._handle_passthrough_telephony_event(
+        session=session,
+        event={'event': 'mark', 'mark': {'name': 'tts-chunk-finished'}},
+    )
+
+    assert session.speaking is True
+
+
 def test_retry_reason_prefers_partial_unclear_when_partial_exists() -> None:
     manager = VoiceSessionManager()
     session = VoiceSession(call_id='call-123', tenant_id='tenant-123')
