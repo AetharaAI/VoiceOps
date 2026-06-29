@@ -45,6 +45,10 @@ PHONE_WORDS = {
     'ate': '8',
     'nine': '9',
 }
+# Number of prior conversation messages (user/assistant turns) replayed to the
+# live LLM so it can see what it already asked and what the caller already
+# answered, instead of re-deriving state only from the missing-field list.
+MAX_LLM_HISTORY_MESSAGES = 8
 RECOVERY_PREFIXES = {
     'no_speech': [
         "I didn't hear anything there.",
@@ -361,6 +365,9 @@ class AgentRuntime:
             'Ask only the next most useful question. Do not ask multiple stacked questions in one turn.\n'
             'Do not invent confirmed appointments, times, transfers, or external actions that have not actually executed.\n'
             'If the caller already gave a detail, acknowledge it and move forward.\n'
+            'Use the conversation so far as the source of truth for what has already been asked and answered. '
+            'Never ask again for something the caller already answered earlier in this call, even if it still '
+            'appears under "Missing required fields" — treat that list as a hint, not a script.\n'
             'Return only the exact spoken reply text for the next turn.'
             f'{transfer_block}'
         )
@@ -420,6 +427,19 @@ class AgentRuntime:
                 return prompt
         return CONNECTION_CHECK_PROMPTS[0]
 
+    def _history_messages(self, conversation_history: list[dict[str, str]] | None) -> list[dict[str, str]]:
+        """Sanitize and cap prior turns for replay to the live LLM."""
+        if not conversation_history:
+            return []
+        sanitized: list[dict[str, str]] = []
+        for entry in conversation_history[-MAX_LLM_HISTORY_MESSAGES:]:
+            role = entry.get('role') if isinstance(entry, dict) else None
+            content = (entry.get('content') if isinstance(entry, dict) else '') or ''
+            content = content.strip()
+            if role in {'user', 'assistant'} and content:
+                sanitized.append({'role': role, 'content': content})
+        return sanitized
+
     async def generate_response(
         self,
         *,
@@ -428,6 +448,7 @@ class AgentRuntime:
         context: dict,
         collected_fields: dict,
         prompted_field: str | None = None,
+        conversation_history: list[dict[str, str]] | None = None,
         telemetry_context: dict | None = None,
     ) -> AgentTurn:
         lowered = user_text.lower()
@@ -531,7 +552,7 @@ class AgentRuntime:
                             is False
                         ),
                         llm_request_shape={
-                            'message_count': 2,
+                            'message_count': 2 + len(self._history_messages(conversation_history)),
                             'temperature': 0.2,
                             'has_extra_body': bool(llm_request_overrides.get('extra_body')),
                             'extra_body_keys': sorted((llm_request_overrides.get('extra_body') or {}).keys()),
@@ -541,6 +562,7 @@ class AgentRuntime:
                     logger.info('call.llm.request.start', extra=event)
                     call_event_sink.record_event(event)
                 if llm_provider == 'openai':
+                    history_messages = self._history_messages(conversation_history)
                     payload = {
                         'model': llm_model,
                         'messages': [
@@ -556,6 +578,7 @@ class AgentRuntime:
                                     human_transfer=human_transfer,
                                 ),
                             },
+                            *history_messages,
                             {'role': 'user', 'content': user_text},
                         ],
                         'temperature': 0.2,
@@ -744,7 +767,28 @@ class AgentRuntime:
             value = self._extract_field_value(field_name=field_name, user_text=user_text)
             if value:
                 captured[field_name] = value
+
+        # If we explicitly asked about a soft/free-text field and the caller gave a
+        # substantive answer the specialized extractor could not normalize, record the
+        # spoken answer so that field is marked collected and not asked again. Structured
+        # fields (name/phone) keep strict extraction plus the existing retry/skip-ahead path.
+        if (
+            prompted_field
+            and prompted_field in missing_fields
+            and prompted_field not in captured
+            and not self._is_structured_field(prompted_field)
+        ):
+            fallback_value = self._extract_generic_text(user_text)
+            if fallback_value:
+                captured[prompted_field] = fallback_value
         return captured
+
+    def _is_structured_field(self, field_name: str) -> bool:
+        lowered = field_name.lower()
+        return lowered in {
+            'name', 'full_name', 'customer_name',
+            'phone', 'phone_number', 'callback_number', 'callback_phone', 'best_callback_number',
+        }
 
     def _field_prompt(self, *, agent: Agent, field_name: str) -> str:
         return (agent.required_fields or {}).get(field_name, {}).get(

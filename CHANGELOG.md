@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-06-29 — live call no longer re-asks already-answered fields
+
+- Symptom on the Mary's Beauty Spa demo line (`+18127212341`, legacy `session_manager` path, `FSM_PIPELINE_ENABLED=false`): the agent asked "what service" again after the caller had already answered it and moved on to the phone number.
+- Root cause: the live LLM turn was sent only `[system, user]` with no transcript, so the stateless model's only memory of what was answered was the `Missing required fields` list. A vague/free-text answer that the regex extractor could not normalize was never marked collected, so it stayed "missing" and the model dutifully re-asked. The tracked `prompted_field` is also only `missing_fields[0]` (a guess), not what the model actually asked, so answers could be matched against the wrong field and dropped.
+- Fix (backend only):
+  - `agent_runtime.generate_response` now accepts `conversation_history` and replays the recent turns to the LLM (capped at `MAX_LLM_HISTORY_MESSAGES = 8`), and the system prompt now treats the conversation as the source of truth — never re-ask something already answered, even if still under `Missing required fields`.
+  - `session_manager` maintains `VoiceSession.conversation_history` (seeded with the opening greeting, appended per turn, trimmed) and passes it into the LLM call.
+  - `capture_required_fields` now records a prompted **soft/free-text** field from a substantive spoken answer when no specialized extractor normalizes it; structured `name`/`phone` fields keep strict extraction + retry/skip-ahead.
+- Tests: added history-replay, soft-field capture, and structured-field-guard cases to `tests/test_agent_runtime.py` (77 passed across agent_runtime/session_manager/state_controller).
+
 ## 2026-06-29 — nginx allowlist refresh + recovery stack restart (deploy VM)
 
 - `voice.aetherpro.us` was returning nginx `403 Forbidden` for the operator browser: Xfinity rotated the operator public IP to `73.145.241.211`, which was not in the `voiceops-recovery.conf` allowlist (rolling-IP problem).

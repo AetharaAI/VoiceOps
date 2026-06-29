@@ -18,7 +18,7 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.metrics import ASR_LATENCY, LLM_LATENCY, TTS_LATENCY
 from app.models.models import Agent, Call, CallStatus, TranscriptSegment
-from app.services.agent_runtime.runtime import AgentTurn, agent_runtime
+from app.services.agent_runtime.runtime import MAX_LLM_HISTORY_MESSAGES, AgentTurn, agent_runtime
 from app.services.asr.client import ASRFinalTranscript, ASRStream, asr_client
 from app.services.realtime.audio import (
     mulaw_to_pcm16,
@@ -77,6 +77,7 @@ class VoiceSession:
     speaking: bool = False
     collected_fields: dict[str, str] = field(default_factory=dict)
     prompted_field: str | None = None
+    conversation_history: list[dict[str, str]] = field(default_factory=list)
     field_retry_counts: dict[str, int] = field(default_factory=dict)
     notable_errors: list[str] = field(default_factory=list)
     caller_turns: int = 0
@@ -1087,6 +1088,16 @@ class VoiceSessionManager:
         transfer_succeeded = False
 
         session.prompted_field = turn.prompted_field
+
+        # Record this exchange so the next LLM turn can see what was already asked and
+        # answered, instead of relying only on the brittle missing-field list.
+        if session.last_asr_final:
+            session.conversation_history.append({'role': 'user', 'content': session.last_asr_final})
+        if turn.response_text:
+            session.conversation_history.append({'role': 'assistant', 'content': turn.response_text})
+        if len(session.conversation_history) > MAX_LLM_HISTORY_MESSAGES:
+            del session.conversation_history[:-MAX_LLM_HISTORY_MESSAGES]
+
         if turn.outcome and not (transfer_requested and turn.outcome == 'transfer_needed'):
             call.outcome = turn.outcome
 
@@ -1212,6 +1223,7 @@ class VoiceSessionManager:
             context=call.context_payload,
             collected_fields=session.collected_fields,
             prompted_field=session.prompted_field,
+            conversation_history=session.conversation_history,
             telemetry_context={
                 **self._telemetry_context(session),
                 'llm_request_index': session.llm_requests,
@@ -1398,6 +1410,10 @@ class VoiceSessionManager:
                             collected_fields=session.collected_fields,
                         )
                         session.prompted_field = opening_turn.prompted_field
+                        if opening_turn.response_text:
+                            session.conversation_history.append(
+                                {'role': 'assistant', 'content': opening_turn.response_text}
+                            )
                         session.llm_mode = opening_turn.llm_mode
                         session.last_response_source = opening_turn.response_source
                         session.detected_intent = opening_turn.detected_intent

@@ -325,6 +325,95 @@ def test_capture_required_fields_only_targets_prompted_field() -> None:
     assert captured == {'name': 'Corey'}
 
 
+def test_capture_records_prompted_soft_field_from_substantive_answer() -> None:
+    # A free-text field the agent explicitly asked about must be recorded from the
+    # spoken answer even when no specialized extractor normalizes it, so the flow
+    # does not loop back and ask the same question again.
+    agent = _make_agent(
+        {
+            'name': {'prompt': 'Can I have your full name?'},
+            'service_interest': {'prompt': 'What service are you interested in?'},
+        }
+    )
+
+    captured = agent_runtime.capture_required_fields(
+        agent=agent,
+        user_text="I've never been there before, I just want to schedule an appointment.",
+        collected_fields={'name': 'Corey'},
+        prompted_field='service_interest',
+    )
+
+    assert 'service_interest' in captured
+    assert agent_runtime.missing_required_fields(
+        agent=agent,
+        collected_fields={'name': 'Corey', **captured},
+    ) == []
+
+
+def test_capture_does_not_fabricate_structured_field_from_vague_answer() -> None:
+    # Structured fields (name/phone) must NOT be satisfied by an un-parseable answer;
+    # they keep strict extraction so the retry/skip-ahead path still runs.
+    agent = _make_agent({'phone': {'prompt': 'What is the best callback number?'}})
+
+    captured = agent_runtime.capture_required_fields(
+        agent=agent,
+        user_text='I am not really sure right now',
+        collected_fields={},
+        prompted_field='phone',
+    )
+
+    assert 'phone' not in captured
+
+
+@pytest.mark.asyncio
+async def test_generate_response_replays_conversation_history_to_llm(monkeypatch) -> None:
+    agent = _make_agent({'service_interest': {'prompt': 'What service are you interested in?'}})
+    agent.policy_config = {'runtime': {'llm_provider': 'openai', 'llm_model': 'omnicoder'}}
+
+    original_endpoint = agent_runtime.settings.llm_endpoint
+    original_api_key = agent_runtime.settings.llm_api_key
+    agent_runtime.settings.llm_endpoint = 'https://api.aetherpro.tech/v1/chat/completions'
+    agent_runtime.settings.llm_api_key = 'test-key'
+
+    captured_payload: dict = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {'choices': [{'message': {'content': 'Got it, thanks!'}}]}
+
+    async def fake_post(url, json, headers):  # noqa: ANN001 - httpx-compatible test shim
+        _ = url
+        _ = headers
+        captured_payload.update(json)
+        return FakeResponse()
+
+    monkeypatch.setattr(agent_runtime.http, 'post', fake_post)
+    history = [
+        {'role': 'assistant', 'content': 'What service are you interested in?'},
+        {'role': 'user', 'content': 'I just want to book an appointment.'},
+    ]
+    try:
+        await agent_runtime.generate_response(
+            agent=agent,
+            user_text='My number is 812-721-2341.',
+            context={},
+            collected_fields={'service_interest': 'book an appointment'},
+            prompted_field='service_interest',
+            conversation_history=history,
+        )
+    finally:
+        agent_runtime.settings.llm_endpoint = original_endpoint
+        agent_runtime.settings.llm_api_key = original_api_key
+
+    roles = [m['role'] for m in captured_payload['messages']]
+    assert roles == ['system', 'assistant', 'user', 'user']
+    assert captured_payload['messages'][1]['content'] == 'What service are you interested in?'
+    assert captured_payload['messages'][-1]['content'] == 'My number is 812-721-2341.'
+
+
 def test_extract_name_handles_noisy_phrase() -> None:
     assert agent_runtime._extract_name('Why, Mary,') == 'Mary'
 
