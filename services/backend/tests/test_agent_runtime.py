@@ -414,6 +414,39 @@ async def test_generate_response_replays_conversation_history_to_llm(monkeypatch
     assert captured_payload['messages'][-1]['content'] == 'My number is 812-721-2341.'
 
 
+def test_active_field_tracks_asked_field_not_dict_order() -> None:
+    # required_fields dict order is name, phone, service — but if we are mid-way
+    # through asking 'service_interest', the active field must stay service_interest
+    # (the field actually being asked), not jump to phone just because it is first.
+    missing = ['phone_number', 'service_interest']
+    assert agent_runtime._active_field('service_interest', missing) == 'service_interest'
+    # Once the asked field is satisfied (no longer missing), advance to the next one.
+    assert agent_runtime._active_field('service_interest', ['phone_number']) == 'phone_number'
+    assert agent_runtime._active_field(None, ['phone_number']) == 'phone_number'
+    assert agent_runtime._active_field('name', []) is None
+
+
+def test_system_prompt_objective_follows_asked_field_over_dict_order() -> None:
+    agent = _make_agent(
+        {
+            'name': {'prompt': 'Who do I have the pleasure of speaking with?'},
+            'phone_number': {'prompt': 'What is the best callback number?'},
+            'service_interest': {'prompt': 'What service or treatment are you interested in?'},
+        }
+    )
+    prompt = agent_runtime.build_llm_system_prompt(
+        agent=agent,
+        context={},
+        collected_fields={'name': 'Corey'},
+        missing_fields=['phone_number', 'service_interest'],
+        prompted_field='service_interest',
+        detected_intent='general',
+    )
+    objective_line = next(line for line in prompt.splitlines() if line.startswith('Current objective'))
+    assert 'service interest' in objective_line
+    assert 'callback number' not in objective_line
+
+
 def test_extract_name_handles_noisy_phrase() -> None:
     assert agent_runtime._extract_name('Why, Mary,') == 'Mary'
 

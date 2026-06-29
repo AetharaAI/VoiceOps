@@ -320,6 +320,17 @@ class AgentRuntime:
             return 'intake_in_progress'
         return 'general'
 
+    def _active_field(self, prompted_field: str | None, missing_fields: list[str]) -> str | None:
+        """The single field to collect next.
+
+        Keep asking the field we were already on while it is still missing (so the
+        question the model asks and the field we extract into stay the same field),
+        and only advance to the next missing field once it has been satisfied.
+        """
+        if prompted_field and prompted_field in missing_fields:
+            return prompted_field
+        return missing_fields[0] if missing_fields else None
+
     def build_llm_system_prompt(
         self,
         *,
@@ -331,7 +342,13 @@ class AgentRuntime:
         detected_intent: str,
         human_transfer: dict | None = None,
     ) -> str:
-        active_field = prompted_field or (missing_fields[0] if missing_fields else '')
+        active_field = self._active_field(prompted_field, missing_fields) or ''
+        active_field_hint = (
+            f'{self._field_label(active_field)} (ask in the spirit of: '
+            f'"{self._field_prompt(agent=agent, field_name=active_field)}")'
+            if active_field
+            else 'none left — all required fields are collected; confirm the details and offer next steps'
+        )
         transfer_block = ''
         if (human_transfer or {}).get('enabled'):
             trigger_mode = human_transfer.get('trigger_mode')
@@ -355,14 +372,15 @@ class AgentRuntime:
             f'Detected intent: {detected_intent}\n'
             f'Collected fields: {collected_fields}\n'
             f'Missing required fields: {missing_fields}\n'
-            f'Current extraction target: {active_field}\n\n'
+            f'Current objective — collect this one field this turn: {active_field_hint}\n\n'
             'You are responding on a live phone call. Speak naturally, briefly, and conversationally.\n'
             'Use plain spoken sentences only. Do not include chuckles, laughter, stage directions, or sound effects.\n'
             'Do not use filler words (for example: um, uh, hmm) and avoid trailing ellipses.\n'
             'Keep each response to 1-2 short sentences unless the caller explicitly asks for more detail.\n'
-            'Lead with understanding the caller intent and guide the conversation from there.\n'
-            'If required fields are still missing, gather them naturally during the conversation instead of reading a rigid checklist.\n'
-            'Ask only the next most useful question. Do not ask multiple stacked questions in one turn.\n'
+            'Ask for the single field named in "Current objective" this turn, phrased as one natural, friendly '
+            'question — do not read a checklist, do not stack multiple questions, and do not move on to other '
+            'fields until this one is provided or the caller declines.\n'
+            'If the caller volunteers a different detail, acknowledge it warmly, then steer back to the current objective.\n'
             'Do not invent confirmed appointments, times, transfers, or external actions that have not actually executed.\n'
             'If the caller already gave a detail, acknowledge it and move forward.\n'
             'Use the conversation so far as the source of truth for what has already been asked and answered. '
@@ -653,7 +671,7 @@ class AgentRuntime:
                     sanitized_text = 'Let me help with that.'
                 return AgentTurn(
                     response_text=sanitized_text,
-                    prompted_field=missing_fields[0] if missing_fields else None,
+                    prompted_field=self._active_field(prompted_field, missing_fields),
                     captured_fields=captured_fields,
                     missing_fields=missing_fields,
                     outcome='partial_intake' if missing_fields else 'success',

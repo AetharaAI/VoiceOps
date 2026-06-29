@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-06-29 — fix field desync that caused reworded re-asks
+
+- Follow-up to the history change: live call still re-asked the same field (e.g. "what service") in different words. Log trace showed the LLM asked fields in the persona/script order (name -> service -> phone) while the backend set `prompted_field = missing_fields[0]` (the `required_fields` dict order: name -> phone -> follow_up -> service). So a service answer was extracted against the wrong field and dropped; service stayed "missing" and got asked again, and a service answer once landed in `follow_up_method`.
+- Fix (`agent_runtime`): the model is now told to collect the **one** backend-chosen field per turn ("Current objective"), and the returned `prompted_field` stays on that same field until it is satisfied (`_active_field`). "What is asked" and "what is captured" are now always the same field, so nothing is dropped and the reword loop stops.
+- Consequence: the agent now asks required fields in `required_fields` **dict order**. Set the Required Fields JSON in the order you want them asked.
+- Tests: added `_active_field` ordering and system-prompt-objective cases (79 passed).
+
 ## 2026-06-29 — live call no longer re-asks already-answered fields
 
 - Symptom on the Mary's Beauty Spa demo line (`+18127212341`, legacy `session_manager` path, `FSM_PIPELINE_ENABLED=false`): the agent asked "what service" again after the caller had already answered it and moved on to the phone number.
