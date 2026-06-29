@@ -15,6 +15,7 @@ import {
   resolvedVoice,
   ttsModelOptions,
   validateInboundJsonFields,
+  voiceCapabilityWarning,
   voiceLabel
 } from '../../lib/operator-builder';
 
@@ -295,6 +296,8 @@ export default function InboundPage() {
 
   const selectedModel = resolvedTtsModel(form.tts_model_select, form.custom_tts_model);
   const voiceOptions = buildVoiceOptions(compatibleVoices(voices, selectedModel));
+  const selectedVoice = voiceOptions.find((voice) => voice.id === form.tts_voice_select);
+  const selectedVoiceWarning = voiceCapabilityWarning(selectedVoice);
   const modelOptions = buildLlmModelOptions(llmModels, form.llm_model);
   const jsonValidation = validateInboundJsonFields(form);
   const saveDisabled = jsonValidation.hasErrors || !form.name.trim();
@@ -425,6 +428,25 @@ export default function InboundPage() {
                 </option>
               ))}
             </select>
+            {selectedVoiceWarning ? (
+              <p
+                style={{
+                  color: selectedVoice?.barge_in_quality === 'degraded' ? '#b42318' : '#8a5300',
+                  background:
+                    selectedVoice?.barge_in_quality === 'degraded'
+                      ? 'rgba(254, 242, 242, 0.92)'
+                      : 'rgba(255, 247, 237, 0.92)',
+                  border: `1px solid ${
+                    selectedVoice?.barge_in_quality === 'degraded' ? '#fecaca' : '#fed7aa'
+                  }`,
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  marginTop: 8,
+                }}
+              >
+                <strong>Live telephony warning:</strong> {selectedVoiceWarning}
+              </p>
+            ) : null}
 
             {form.tts_voice_select === '__custom__' ? (
               <>

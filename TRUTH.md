@@ -54,6 +54,23 @@
   - barge-in / talk-over anomalies
 - These are runtime polish issues after routing, not evidence that Twilio ingress is broken.
 
+## Observed Root Cause For Mary's Demo Line
+- Verified on `2026-06-26`: the step-on regression on `+18127212341` is not primarily a stale route, stale DB mapping, or broken save-cache path.
+- The live recovery DB is updating and the mapped agent row is being read by the runtime.
+- The strongest observed change was a lane switch on the same mapped agent:
+  - earlier better-behaving sample: `kokoro_realtime` + `bf_emma`
+  - later degraded sample: `voxtream2_realtime` + clone/studio voice
+- Live backend telemetry showed:
+  - Kokoro greeting first audio around `~449ms`
+  - Voxtream2 greeting first audio around `~5036ms`
+- That added startup latency creates dead air, late interrupt handling, and retry churn that feels like the agent is stepping on the caller.
+- Live telephony baseline remains `kokoro_realtime` until Voxtream2 is re-qualified for interruptible PSTN calls.
+
+## Runtime Path Truth
+- Verified live `b3-32` env on `2026-06-26`: `FSM_PIPELINE_ENABLED=false`
+- Public Twilio media on the recovery deployment is still using the legacy `session_manager` path, not the Phase 3 FSM pipeline.
+- Current Mary/Syndicate barge-in difference is therefore not explained by one number being on the new FSM while the other is not.
+
 ## Local Fix Verified On Workstation
 - Added inbound JSON validation before submit for:
   - `required_fields`

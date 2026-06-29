@@ -55,6 +55,7 @@
   - as of `2026-03-27`, Voxtream2 voice options are sourced from Studio registry (`/api/v1/tts/studio/voices`, tenant `default`) and filtered by `runtime_target=voxtream2_realtime` with required `reference_audio_path`
   - Qwen preset voices are no longer eligible for `voxtream2_realtime` unless a registry voice explicitly advertises that runtime target
   - production telephony baseline remains `kokoro_realtime` until flow/perf qualification completes
+  - verified live on `2026-06-26`: Mary demo regression coincided with a switch from `kokoro_realtime` to `voxtream2_realtime`, with greeting first-audio latency rising from sub-second to ~5 seconds on the same mapped agent
 
 ## Deployment Mode (Current)
 - Runtime: Docker Compose (`docker-compose.yml`) on CPU gateway node.
@@ -143,6 +144,8 @@ Phase 3 (FSM Pipeline) is **COMPLETE** on the `fsm-build` branch. All 84 tests p
    - verify greeting, field capture, and readback behavior on a real call
    - observe whether `send_email/create_note/mark_outcome` produce the intended artifacts
    - confirm whether `phone_number` field naming behaves better or worse than `callback_number` under PSTN extraction
+   - restore `kokoro_realtime` as the live demo baseline unless/until Voxtream2 is re-qualified for interruptible telephony
+   - confirm whether the new UI warning for degraded/unverified lanes changes operator selection behavior
 3. Validate `2026-03-26` timing tune in live calls:
    - `silence_timeout_seconds` increased `8.0 -> 10.0`
    - end-of-turn silence threshold increased `30 -> 40` frames in both FSM + legacy paths

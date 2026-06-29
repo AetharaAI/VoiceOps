@@ -1,6 +1,7 @@
 export const TTS_MODEL_OPTIONS = [
   { id: 'kokoro_realtime', label: 'Kokoro Realtime', provider: 'aether_voice' },
   { id: 'voxtream2_realtime', label: 'Voxtream2 Realtime', provider: 'aether_voice' },
+  { id: 'voxtral_tts', label: 'Voxtral TTS', provider: 'aether_voice' },
   { id: 'qwen_customvoice', label: 'Qwen Custom Voice Batch', provider: 'aether_voice' },
   { id: 'qwen_customvoice_streaming', label: 'Qwen Custom Voice Streaming', provider: 'aether_voice' },
   { id: 'qwen_voice_design', label: 'Qwen Voice Design', provider: 'aether_voice' }
@@ -16,7 +17,8 @@ export const DEFAULT_VOICE_OPTIONS = [
   { id: 'am_adam', label: 'Adam', family: 'kokoro_realtime', gender: 'male', style_tag: 'steady', provider: 'aether_voice', models: ['kokoro_realtime'], is_default: false },
   { id: 'qwen_vivian', label: 'Vivian', family: 'qwen_customvoice', gender: 'female', style_tag: 'polished', provider: 'aether_voice', models: QWEN_PROVIDER_MODELS, is_default: false },
   { id: 'qwen_serena', label: 'Serena', family: 'qwen_customvoice', gender: 'female', style_tag: 'calm', provider: 'aether_voice', models: QWEN_PROVIDER_MODELS, is_default: false },
-  { id: 'qwen_ryan', label: 'Ryan', family: 'qwen_customvoice', gender: 'male', style_tag: 'clear', provider: 'aether_voice', models: QWEN_PROVIDER_MODELS, is_default: false }
+  { id: 'qwen_ryan', label: 'Ryan', family: 'qwen_customvoice', gender: 'male', style_tag: 'clear', provider: 'aether_voice', models: QWEN_PROVIDER_MODELS, is_default: false },
+  { id: 'voxtral_casual_female', label: 'Voxtral Casual Female', family: 'voxtral_tts', gender: 'female', style_tag: 'casual', provider: 'aether_voice', models: ['voxtral_tts'], is_default: false }
 ];
 
 const CUSTOM_TTS_MODEL_OPTION = { id: '__custom__', label: 'Custom TTS Model' };
@@ -128,6 +130,27 @@ export function voiceLabel(voice) {
   return voice.is_default
     ? `${voice.label} (${voice.id}, default${modelHint})`
     : `${voice.label} (${voice.id}${suffix ? `, ${suffix}` : ''}${modelHint})`;
+}
+
+export function voiceCapabilityWarning(voice) {
+  if (!voice || voice.id === '__custom__') return '';
+  if (voice.telephony_recommended) return '';
+
+  if (voice.barge_in_quality === 'degraded') {
+    return (
+      voice.operator_note ||
+      'This TTS lane is currently degraded for live inbound barge-in and natural turn-taking.'
+    );
+  }
+
+  if (voice.barge_in_quality === 'unverified') {
+    return (
+      voice.operator_note ||
+      'This TTS lane is not yet qualified as the live inbound telephony baseline.'
+    );
+  }
+
+  return voice.operator_note || '';
 }
 
 export function resolvedTtsModel(modelSelect, customModel) {

@@ -12,7 +12,17 @@ logger = logging.getLogger(__name__)
 DEFAULT_TTS_PROVIDER = 'aether_voice'
 QWEN_TTS_MODELS = ['qwen_customvoice', 'qwen_customvoice_streaming', 'qwen_voice_design']
 VOXTREAM2_RUNTIME_TARGET = 'voxtream2_realtime'
+VOXTRAL_TTS_MODEL = 'voxtral_tts'
 STUDIO_TENANT_HEADER_VALUE = 'default'
+KOKORO_OPERATOR_NOTE = 'Qualified live inbound telephony baseline with low startup latency and acceptable interrupt behavior.'
+QWEN_OPERATOR_NOTE = 'Not yet qualified as the live inbound telephony baseline. Use for controlled tests until PSTN interrupt behavior is verified.'
+VOXTREAM2_OPERATOR_NOTE = (
+    'Observed degraded live inbound behavior on 2026-06-26: multi-second first-audio latency and weak turn-taking.'
+)
+VOXTRAL_OPERATOR_NOTE = (
+    'Premium Voxtral TTS demo lane (Aether-Voice-X gateway). Not qualified as a live inbound telephony '
+    'baseline; use for demos and controlled tests until PSTN interrupt/latency behavior is verified.'
+)
 
 KOKORO_TTS_VOICES = [
     {
@@ -23,6 +33,10 @@ KOKORO_TTS_VOICES = [
         'family': 'kokoro_realtime',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': ['kokoro_realtime'],
+        'telephony_recommended': True,
+        'barge_in_quality': 'qualified',
+        'latency_profile': 'low',
+        'operator_note': KOKORO_OPERATOR_NOTE,
     },
     {
         'id': 'af_heart',
@@ -32,6 +46,10 @@ KOKORO_TTS_VOICES = [
         'family': 'kokoro_realtime',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': ['kokoro_realtime'],
+        'telephony_recommended': True,
+        'barge_in_quality': 'qualified',
+        'latency_profile': 'low',
+        'operator_note': KOKORO_OPERATOR_NOTE,
     },
     {
         'id': 'af_nicole',
@@ -41,6 +59,10 @@ KOKORO_TTS_VOICES = [
         'family': 'kokoro_realtime',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': ['kokoro_realtime'],
+        'telephony_recommended': True,
+        'barge_in_quality': 'qualified',
+        'latency_profile': 'low',
+        'operator_note': KOKORO_OPERATOR_NOTE,
     },
     {
         'id': 'af_sarah',
@@ -50,6 +72,10 @@ KOKORO_TTS_VOICES = [
         'family': 'kokoro_realtime',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': ['kokoro_realtime'],
+        'telephony_recommended': True,
+        'barge_in_quality': 'qualified',
+        'latency_profile': 'low',
+        'operator_note': KOKORO_OPERATOR_NOTE,
     },
     {
         'id': 'af_sky',
@@ -59,6 +85,10 @@ KOKORO_TTS_VOICES = [
         'family': 'kokoro_realtime',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': ['kokoro_realtime'],
+        'telephony_recommended': True,
+        'barge_in_quality': 'qualified',
+        'latency_profile': 'low',
+        'operator_note': KOKORO_OPERATOR_NOTE,
     },
     {
         'id': 'am_adam',
@@ -68,6 +98,10 @@ KOKORO_TTS_VOICES = [
         'family': 'kokoro_realtime',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': ['kokoro_realtime'],
+        'telephony_recommended': True,
+        'barge_in_quality': 'qualified',
+        'latency_profile': 'low',
+        'operator_note': KOKORO_OPERATOR_NOTE,
     },
     {
         'id': 'am_michael',
@@ -77,6 +111,10 @@ KOKORO_TTS_VOICES = [
         'family': 'kokoro_realtime',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': ['kokoro_realtime'],
+        'telephony_recommended': True,
+        'barge_in_quality': 'qualified',
+        'latency_profile': 'low',
+        'operator_note': KOKORO_OPERATOR_NOTE,
     },
     {
         'id': 'bf_emma',
@@ -86,6 +124,10 @@ KOKORO_TTS_VOICES = [
         'family': 'kokoro_realtime',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': ['kokoro_realtime'],
+        'telephony_recommended': True,
+        'barge_in_quality': 'qualified',
+        'latency_profile': 'low',
+        'operator_note': KOKORO_OPERATOR_NOTE,
     },
     {
         'id': 'bf_isabella',
@@ -95,6 +137,10 @@ KOKORO_TTS_VOICES = [
         'family': 'kokoro_realtime',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': ['kokoro_realtime'],
+        'telephony_recommended': True,
+        'barge_in_quality': 'qualified',
+        'latency_profile': 'low',
+        'operator_note': KOKORO_OPERATOR_NOTE,
     },
     {
         'id': 'bm_george',
@@ -104,6 +150,10 @@ KOKORO_TTS_VOICES = [
         'family': 'kokoro_realtime',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': ['kokoro_realtime'],
+        'telephony_recommended': True,
+        'barge_in_quality': 'qualified',
+        'latency_profile': 'low',
+        'operator_note': KOKORO_OPERATOR_NOTE,
     },
     {
         'id': 'bm_lewis',
@@ -113,6 +163,10 @@ KOKORO_TTS_VOICES = [
         'family': 'kokoro_realtime',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': ['kokoro_realtime'],
+        'telephony_recommended': True,
+        'barge_in_quality': 'qualified',
+        'latency_profile': 'low',
+        'operator_note': KOKORO_OPERATOR_NOTE,
     },
 ]
 
@@ -125,6 +179,10 @@ QWEN_TTS_VOICES = [
         'family': 'qwen_customvoice',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': QWEN_TTS_MODELS,
+        'telephony_recommended': False,
+        'barge_in_quality': 'unverified',
+        'latency_profile': 'unverified',
+        'operator_note': QWEN_OPERATOR_NOTE,
     },
     {
         'id': 'qwen_aiden',
@@ -134,6 +192,10 @@ QWEN_TTS_VOICES = [
         'family': 'qwen_customvoice',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': QWEN_TTS_MODELS,
+        'telephony_recommended': False,
+        'barge_in_quality': 'unverified',
+        'latency_profile': 'unverified',
+        'operator_note': QWEN_OPERATOR_NOTE,
     },
     {
         'id': 'qwen_serena',
@@ -143,6 +205,10 @@ QWEN_TTS_VOICES = [
         'family': 'qwen_customvoice',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': QWEN_TTS_MODELS,
+        'telephony_recommended': False,
+        'barge_in_quality': 'unverified',
+        'latency_profile': 'unverified',
+        'operator_note': QWEN_OPERATOR_NOTE,
     },
     {
         'id': 'qwen_vivian',
@@ -152,6 +218,10 @@ QWEN_TTS_VOICES = [
         'family': 'qwen_customvoice',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': QWEN_TTS_MODELS,
+        'telephony_recommended': False,
+        'barge_in_quality': 'unverified',
+        'latency_profile': 'unverified',
+        'operator_note': QWEN_OPERATOR_NOTE,
     },
     {
         'id': 'qwen_uncle_fu',
@@ -161,6 +231,10 @@ QWEN_TTS_VOICES = [
         'family': 'qwen_customvoice',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': QWEN_TTS_MODELS,
+        'telephony_recommended': False,
+        'barge_in_quality': 'unverified',
+        'latency_profile': 'unverified',
+        'operator_note': QWEN_OPERATOR_NOTE,
     },
     {
         'id': 'qwen_sohee',
@@ -170,6 +244,10 @@ QWEN_TTS_VOICES = [
         'family': 'qwen_customvoice',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': QWEN_TTS_MODELS,
+        'telephony_recommended': False,
+        'barge_in_quality': 'unverified',
+        'latency_profile': 'unverified',
+        'operator_note': QWEN_OPERATOR_NOTE,
     },
     {
         'id': 'qwen_dylan',
@@ -179,6 +257,10 @@ QWEN_TTS_VOICES = [
         'family': 'qwen_customvoice',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': QWEN_TTS_MODELS,
+        'telephony_recommended': False,
+        'barge_in_quality': 'unverified',
+        'latency_profile': 'unverified',
+        'operator_note': QWEN_OPERATOR_NOTE,
     },
     {
         'id': 'qwen_eric',
@@ -188,6 +270,10 @@ QWEN_TTS_VOICES = [
         'family': 'qwen_customvoice',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': QWEN_TTS_MODELS,
+        'telephony_recommended': False,
+        'barge_in_quality': 'unverified',
+        'latency_profile': 'unverified',
+        'operator_note': QWEN_OPERATOR_NOTE,
     },
     {
         'id': 'qwen_ono_anna',
@@ -197,6 +283,26 @@ QWEN_TTS_VOICES = [
         'family': 'qwen_customvoice',
         'provider': DEFAULT_TTS_PROVIDER,
         'models': QWEN_TTS_MODELS,
+        'telephony_recommended': False,
+        'barge_in_quality': 'unverified',
+        'latency_profile': 'unverified',
+        'operator_note': QWEN_OPERATOR_NOTE,
+    },
+]
+
+VOXTRAL_TTS_VOICES = [
+    {
+        'id': 'voxtral_casual_female',
+        'label': 'Voxtral Casual Female',
+        'gender': 'female',
+        'style_tag': 'casual',
+        'family': VOXTRAL_TTS_MODEL,
+        'provider': DEFAULT_TTS_PROVIDER,
+        'models': [VOXTRAL_TTS_MODEL],
+        'telephony_recommended': False,
+        'barge_in_quality': 'unverified',
+        'latency_profile': 'unverified',
+        'operator_note': VOXTRAL_OPERATOR_NOTE,
     },
 ]
 
@@ -206,7 +312,7 @@ def list_tts_voices() -> list[dict[str, Any]]:
     default_voice = settings.aether_voice_tts_voice
     default_model = settings.aether_voice_tts_model
     voices: list[dict[str, Any]] = []
-    for voice in [*KOKORO_TTS_VOICES, *QWEN_TTS_VOICES]:
+    for voice in [*KOKORO_TTS_VOICES, *QWEN_TTS_VOICES, *VOXTRAL_TTS_VOICES]:
         voices.append(
             {
                 **voice,
@@ -246,6 +352,10 @@ def extract_voxtream2_studio_voices(payload: Any) -> list[dict[str, Any]]:
                 'models': [VOXTREAM2_RUNTIME_TARGET],
                 'reference_audio_path': str(reference_audio_path),
                 'is_default': False,
+                'telephony_recommended': False,
+                'barge_in_quality': 'degraded',
+                'latency_profile': 'high',
+                'operator_note': VOXTREAM2_OPERATOR_NOTE,
             }
         )
     return extracted

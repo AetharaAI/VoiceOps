@@ -31,13 +31,23 @@ def test_tts_voice_registry_exposes_full_inventory() -> None:
         'qwen_dylan',
         'qwen_eric',
         'qwen_ono_anna',
+        'voxtral_casual_female',
     }.issubset(voice_ids)
+    assert voice_index['voxtral_casual_female']['models'] == ['voxtral_tts']
+    assert voice_index['voxtral_casual_female']['provider'] == 'aether_voice'
+    assert voice_index['voxtral_casual_female']['telephony_recommended'] is False
+    assert voice_index['voxtral_casual_female']['barge_in_quality'] == 'unverified'
     assert voice_index['qwen_serena']['provider'] == 'aether_voice'
     assert voice_index['qwen_serena']['models'] == [
         'qwen_customvoice',
         'qwen_customvoice_streaming',
         'qwen_voice_design',
     ]
+    assert voice_index['af_bella']['telephony_recommended'] is True
+    assert voice_index['af_bella']['barge_in_quality'] == 'qualified'
+    assert voice_index['af_bella']['latency_profile'] == 'low'
+    assert voice_index['qwen_serena']['telephony_recommended'] is False
+    assert voice_index['qwen_serena']['barge_in_quality'] == 'unverified'
     assert any(voice['is_default'] for voice in voices)
 
 
@@ -80,6 +90,10 @@ def test_extract_voxtream2_studio_voices_filters_runtime_target_and_requires_ref
         'models': ['voxtream2_realtime'],
         'reference_audio_path': '/voices/maya.wav',
         'is_default': False,
+        'telephony_recommended': False,
+        'barge_in_quality': 'degraded',
+        'latency_profile': 'high',
+        'operator_note': 'Observed degraded live inbound behavior on 2026-06-26: multi-second first-audio latency and weak turn-taking.',
     }
 
 

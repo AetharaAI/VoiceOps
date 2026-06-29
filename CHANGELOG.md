@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-06-29 — Voxtral TTS demo lane added to operator builders
+
+- Added the `voxtral_tts` lane to the VoiceOps TTS model dropdown (inbound, outbound, and agents builders share `services/frontend/lib/operator-builder.js`).
+  - Canonical gateway model id is `voxtral_tts` (Aether-Voice-X also aliases `voxtral-tts` -> `voxtral_tts`).
+  - Runs as a separate provider container (`~/Aether-Voice-Platform/voxtral-tts`, `Voxtral-4B-TTS-2603` on the L4-360 GPU) behind the Aether-Voice-X gateway.
+- Seeded the provider's preset voice `voxtral_casual_female` (raw provider name `casual_female`):
+  - backend static registry `services/backend/app/services/tts/voice_registry.py` (`list_tts_voices()`)
+  - frontend offline fallback `DEFAULT_VOICE_OPTIONS`
+- Marked the lane conservatively (`telephony_recommended=False`, `barge_in_quality=unverified`, `latency_profile=unverified`) so the existing non-baseline operator warning surfaces — this is an internal premium demo lane (output not licensed for client sale), not a qualified live telephony baseline.
+- Added/updated tests:
+  - `services/backend/tests/test_tts_voice_registry.py`
+- Verification:
+  - `cd services/backend && pytest -q tests/test_tts_voice_registry.py`
+
+## 2026-06-26 — telephony lane truth surfaced in inbound builder
+
+- Diagnosed the Mary demo talk-over regression against live runtime evidence instead of guessing:
+  - live save/mapping path was working
+  - live `+18127212341` was reading the updated mapped agent row
+  - recovery deployment was still on the legacy telephony runtime (`FSM_PIPELINE_ENABLED=false`)
+  - strongest causal shift was TTS lane change from `kokoro_realtime` to `voxtream2_realtime`
+- Added explicit TTS capability metadata to the backend voice contract in:
+  - `services/backend/app/schemas/agent.py`
+  - `services/backend/app/services/tts/voice_registry.py`
+- Voice metadata now includes:
+  - `telephony_recommended`
+  - `barge_in_quality`
+  - `latency_profile`
+  - `operator_note`
+- Marked current lane truth conservatively:
+  - `kokoro_realtime` = qualified/recommended live inbound baseline
+  - `qwen_*` voices = unverified for live inbound baseline
+  - `voxtream2_realtime` studio voices = degraded for live inbound based on observed 2026-06-26 runtime traces
+- Updated inbound workflow editor to surface a visible warning when an operator selects a non-baseline live TTS voice/lane.
+- Added/updated tests:
+  - `services/backend/tests/test_tts_voice_registry.py`
+- Verification:
+  - `cd services/backend && pytest -q tests/test_tts_voice_registry.py tests/test_stream_ingester.py tests/test_session_manager.py tests/test_agent_runtime.py tests/test_state_controller.py`
+  - `cd services/frontend && npm run build`
+
 ## 2026-06-26 — inbound builder save-path visibility fix + recovery deployment truth refresh
 
 - Verified live recovery deployment facts from the `b3-32` VoiceOps VM without changing backend app code:

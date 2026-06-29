@@ -45,3 +45,7 @@ class TTSVoiceOption(BaseModel):
     models: list[str] = Field(default_factory=list)
     reference_audio_path: str | None = None
     is_default: bool = False
+    telephony_recommended: bool = False
+    barge_in_quality: str = 'unverified'
+    latency_profile: str = 'unknown'
+    operator_note: str | None = None
